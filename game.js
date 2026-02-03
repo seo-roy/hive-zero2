@@ -1,22 +1,31 @@
 function drawCrosshair() {
-    // Mobile: show touch target indicator
-    if (isMobile) {
-        const touchTarget = Input.getTouchTarget();
-        if (touchTarget.active) {
-            const screenX = touchTarget.x - game.camera.x;
-            const screenY = touchTarget.y - game.camera.y;
-            
-            ctx.strokeStyle = 'rgba(0, 255, 255, 0.4)';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([5, 5]);
-            ctx.beginPath();
-            ctx.moveTo(WIDTH / 2, HEIGHT / 2);
-            ctx.lineTo(screenX, screenY);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
+    // Mobile: show virtual joystick indicator
+    if (isMobile && Input.touch.active) {
+        // Draw joystick base (where touch started)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(Input.touch.startX, Input.touch.startY, 50, 0, Math.PI * 2);
+        ctx.stroke();
         
-        // Show auto-aim target
+        // Draw joystick stick (current position)
+        ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
+        ctx.beginPath();
+        ctx.arc(Input.touch.currentX, Input.touch.currentY, 25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#0ff';
+        ctx.stroke();
+        
+        // Draw direction line
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.4)';
+        ctx.beginPath();
+        ctx.moveTo(Input.touch.startX, Input.touch.startY);
+        ctx.lineTo(Input.touch.currentX, Input.touch.currentY);
+        ctx.stroke();
+    }
+    
+    // Show auto-aim target on mobile
+    if (isMobile) {
         const leader = game.squad[0];
         if (leader) {
             const target = leader.getNearestEnemy();
@@ -154,18 +163,23 @@ const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/
 if (isMobile) document.body.classList.add('mobile');
 else document.body.classList.add('desktop');
 
-// Input - One-hand touch controls for mobile
+// Debug display
+let debugText = '';
+
+// Input - Virtual joystick style for mobile (touch anywhere)
 const Input = {
     keys: {}, 
     mouse: { x: 0, y: 0, down: false }, 
     lastMove: 0,
-    // Mobile touch state
+    // Virtual joystick - touch anywhere
     touch: { 
-        active: false, 
-        x: 0, 
-        y: 0, 
-        worldX: 0, 
-        worldY: 0
+        active: false,
+        startX: 0,  // Where touch started (joystick center)
+        startY: 0,
+        currentX: 0, // Current touch position
+        currentY: 0,
+        dirX: 0,    // Direction (-1 to 1)
+        dirY: 0
     },
     
     init() {
@@ -188,43 +202,38 @@ const Input = {
         });
 
         // Mouse (Desktop)
-        window.addEventListener('mousemove', e => {
-            if (isMobile) return;
+        canvas.addEventListener('mousemove', e => {
             const r = canvas.getBoundingClientRect();
             this.mouse.x = e.clientX - r.left;
             this.mouse.y = e.clientY - r.top;
             this.lastMove = performance.now();
         });
-        window.addEventListener('mousedown', e => {
-            if (isMobile) return;
+        canvas.addEventListener('mousedown', e => {
             this.mouse.down = true;
             if (game.showUpgradeUI) {
                 const choice = getUpgradeChoiceAt(e.clientX, e.clientY);
                 if (choice !== -1) selectUpgrade(choice);
             }
         });
-        window.addEventListener('mouseup', () => { if (!isMobile) this.mouse.down = false; });
+        canvas.addEventListener('mouseup', () => { this.mouse.down = false; });
 
-        // Touch / Mobile - One hand controls
-        this.initMobileOneHand();
+        // Touch controls
+        this.initTouch();
     },
 
-    initMobileOneHand() {
-        const touchIndicator = document.getElementById('touch-indicator');
+    initTouch() {
+        const self = this;
+        const maxJoyDist = 60; // Max distance for full speed
         
-        // Touch handlers on document for better capture
-        const handleTouchStart = (e) => {
-            // Check for button touches first
-            if (e.target.closest('.action-btn') || e.target.closest('#btn-pause')) {
-                return; // Let button handlers deal with it
-            }
+        canvas.addEventListener('touchstart', function(e) {
+            e.preventDefault();
             
+            // Check upgrade UI first
             if (game.showUpgradeUI) {
                 const touch = e.touches[0];
                 const choice = getUpgradeChoiceAt(touch.clientX, touch.clientY);
                 if (choice !== -1) {
                     selectUpgrade(choice);
-                    e.preventDefault();
                     return;
                 }
             }
@@ -232,54 +241,59 @@ const Input = {
             if (game.paused || !game.active) return;
             
             const touch = e.touches[0];
-            this.touch.active = true;
-            this.touch.x = touch.clientX;
-            this.touch.y = touch.clientY;
-            this.touch.worldX = touch.clientX + game.camera.x;
-            this.touch.worldY = touch.clientY + game.camera.y;
             
-            // Show touch indicator
-            if (touchIndicator) {
-                touchIndicator.style.left = touch.clientX + 'px';
-                touchIndicator.style.top = touch.clientY + 'px';
-                touchIndicator.classList.add('active');
-            }
+            // Start virtual joystick at touch position
+            self.touch.active = true;
+            self.touch.startX = touch.clientX;
+            self.touch.startY = touch.clientY;
+            self.touch.currentX = touch.clientX;
+            self.touch.currentY = touch.clientY;
+            self.touch.dirX = 0;
+            self.touch.dirY = 0;
             
-            this.lastMove = performance.now();
+            debugText = 'START: ' + Math.round(touch.clientX) + ', ' + Math.round(touch.clientY);
+        }, { passive: false });
+        
+        canvas.addEventListener('touchmove', function(e) {
             e.preventDefault();
-        };
-
-        const handleTouchMove = (e) => {
-            if (game.paused || !game.active || !this.touch.active) return;
+            
+            if (!self.touch.active || game.paused || !game.active) return;
             
             const touch = e.touches[0];
-            this.touch.x = touch.clientX;
-            this.touch.y = touch.clientY;
-            this.touch.worldX = touch.clientX + game.camera.x;
-            this.touch.worldY = touch.clientY + game.camera.y;
+            self.touch.currentX = touch.clientX;
+            self.touch.currentY = touch.clientY;
             
-            // Update indicator
-            if (touchIndicator) {
-                touchIndicator.style.left = touch.clientX + 'px';
-                touchIndicator.style.top = touch.clientY + 'px';
+            // Calculate direction from start point
+            const dx = touch.clientX - self.touch.startX;
+            const dy = touch.clientY - self.touch.startY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist > 5) { // Dead zone
+                // Normalize and clamp to -1 to 1
+                const factor = Math.min(dist, maxJoyDist) / maxJoyDist;
+                self.touch.dirX = (dx / dist) * factor;
+                self.touch.dirY = (dy / dist) * factor;
+            } else {
+                self.touch.dirX = 0;
+                self.touch.dirY = 0;
             }
             
-            this.lastMove = performance.now();
+            debugText = 'DIR: ' + self.touch.dirX.toFixed(2) + ', ' + self.touch.dirY.toFixed(2);
+        }, { passive: false });
+        
+        canvas.addEventListener('touchend', function(e) {
             e.preventDefault();
-        };
-
-        const handleTouchEnd = (e) => {
-            this.touch.active = false;
-            if (touchIndicator) {
-                touchIndicator.classList.remove('active');
-            }
-        };
-
-        // Add listeners to canvas
-        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-        canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
-        canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+            self.touch.active = false;
+            self.touch.dirX = 0;
+            self.touch.dirY = 0;
+            debugText = 'END';
+        }, { passive: false });
+        
+        canvas.addEventListener('touchcancel', function(e) {
+            self.touch.active = false;
+            self.touch.dirX = 0;
+            self.touch.dirY = 0;
+        }, { passive: false });
 
         // Button handlers
         const btnDash = document.getElementById('btn-dash');
@@ -287,45 +301,42 @@ const Input = {
         const btnPause = document.getElementById('btn-pause');
 
         if (btnDash) {
-            btnDash.addEventListener('touchstart', e => {
+            btnDash.addEventListener('touchstart', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
+                debugText = 'DASH!';
                 const leader = game.squad.find(p => p.isLeader);
                 if (leader && game.active && !game.paused) leader.dash();
             }, { passive: false });
         }
 
         if (btnReload) {
-            btnReload.addEventListener('touchstart', e => {
+            btnReload.addEventListener('touchstart', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
+                debugText = 'RELOAD!';
                 game.squad.forEach(p => p.reload());
             }, { passive: false });
         }
 
         if (btnPause) {
-            btnPause.addEventListener('touchstart', e => {
+            btnPause.addEventListener('touchstart', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
                 if (game.active) game.paused = !game.paused;
             }, { passive: false });
         }
 
-        // Prevent zoom/scroll
-        document.addEventListener('touchmove', e => {
-            if (e.touches.length > 1) e.preventDefault();
-        }, { passive: false });
-        
+        // Prevent zoom
         document.addEventListener('gesturestart', e => e.preventDefault());
-        document.addEventListener('gesturechange', e => e.preventDefault());
     },
 
-    // Get touch target position for movement
-    getTouchTarget() {
+    // Get movement direction for player
+    getMoveDirection() {
         if (this.touch.active) {
             return { 
-                x: this.touch.worldX, 
-                y: this.touch.worldY, 
+                x: this.touch.dirX, 
+                y: this.touch.dirY, 
                 active: true 
             };
         }
@@ -423,23 +434,27 @@ class Player extends Entity {
         
         let dx, dy;
         
-        // Try to dash away from nearest enemy first
-        const nearest = this.getNearestEnemy();
-        if (nearest) {
-            dx = this.x - nearest.x;
-            dy = this.y - nearest.y;
-        } else if (Math.abs(this.vx) > 10 || Math.abs(this.vy) > 10) {
-            // Dash in movement direction
-            dx = this.vx;
-            dy = this.vy;
-        } else if (!isMobile) {
-            // Desktop: dash toward mouse
-            dx = Input.mouse.x + game.camera.x - (this.x + this.w / 2);
-            dy = Input.mouse.y + game.camera.y - (this.y + this.h / 2);
+        // Mobile: use joystick direction or dash away from enemy
+        const moveDir = Input.getMoveDirection();
+        if (moveDir.active && (Math.abs(moveDir.x) > 0.1 || Math.abs(moveDir.y) > 0.1)) {
+            // Dash in joystick direction
+            dx = moveDir.x;
+            dy = moveDir.y;
         } else {
-            // Default: dash in facing direction
-            dx = this.facingRight ? 1 : -1;
-            dy = 0;
+            // Dash away from nearest enemy
+            const nearest = this.getNearestEnemy();
+            if (nearest) {
+                dx = this.x - nearest.x;
+                dy = this.y - nearest.y;
+            } else if (!isMobile) {
+                // Desktop: dash toward mouse
+                dx = Input.mouse.x + game.camera.x - (this.x + this.w / 2);
+                dy = Input.mouse.y + game.camera.y - (this.y + this.h / 2);
+            } else {
+                // Default: dash in facing direction
+                dx = this.facingRight ? 1 : -1;
+                dy = 0;
+            }
         }
         
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -468,23 +483,14 @@ class Player extends Entity {
             this.dashTimer = Math.max(0, this.dashTimer - dt);
             
             if (this.isLeader) {
-                // Check for touch input first (mobile)
-                const touchTarget = Input.getTouchTarget();
+                // Check for touch input (mobile virtual joystick)
+                const moveDir = Input.getMoveDirection();
                 
-                if (touchTarget.active) {
-                    // Mobile: tap to move
-                    const dx = touchTarget.x - (this.x + this.w / 2);
-                    const dy = touchTarget.y - (this.y + this.h / 2);
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    
-                    if (dist > 30) {
-                        this.vx = (dx / dist) * this.speed;
-                        this.vy = (dy / dist) * this.speed;
-                        this.facingRight = dx > 0;
-                    } else {
-                        this.vx = 0;
-                        this.vy = 0;
-                    }
+                if (moveDir.active && (Math.abs(moveDir.x) > 0.1 || Math.abs(moveDir.y) > 0.1)) {
+                    // Mobile: virtual joystick movement
+                    this.vx = moveDir.x * this.speed;
+                    this.vy = moveDir.y * this.speed;
+                    if (Math.abs(moveDir.x) > 0.1) this.facingRight = moveDir.x > 0;
                 } else if (!isMobile) {
                     // Desktop mouse movement
                     const targetX = Input.mouse.x + game.camera.x;
@@ -1546,6 +1552,15 @@ function drawCrosshair() {
 }
 
 function drawHUD() {
+    // Debug text for mobile
+    if (debugText) {
+        ctx.fillStyle = '#ff0';
+        ctx.font = 'bold 16px monospace';
+        ctx.fillText(debugText, 10, 60);
+        ctx.fillText('Touch Active: ' + Input.touch.active, 10, 80);
+        ctx.fillText('World: ' + Math.round(Input.touch.worldX) + ', ' + Math.round(Input.touch.worldY), 10, 100);
+    }
+
     // Combo display
     if (game.combo > 1) {
         const comboScale = 1 + Math.min(game.combo * 0.02, 0.5);

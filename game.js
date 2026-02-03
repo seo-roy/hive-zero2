@@ -334,10 +334,12 @@ class Entity {
 
 class Player extends Entity {
     constructor(x, y, isLeader = false, followTarget = null) {
-        super(x, y, 60, 90);
+        const scale = isMobile ? 0.6 : 1; // Mobile: 60% size
+        super(x, y, 60 * scale, 90 * scale);
         this.isLeader = isLeader;
         this.followTarget = followTarget;
         this.speed = 300 * (1 + persistent.upgrades.speed * 0.03);
+        this.scale = scale;
         this.weapon = 'rifle';
         this.fireRate = WEAPONS.rifle.fireRate;
         this.bulletDamage = WEAPONS.rifle.damage * (1 + persistent.upgrades.damage * 0.05);
@@ -602,7 +604,9 @@ class Player extends Entity {
         if (!this.facingRight) ctx.scale(-1, 1);
 
         if (ASSETS.hero.complete && ASSETS.hero.naturalWidth > 0) {
-            ctx.drawImage(ASSETS.hero, -45, -50, 90, 100);
+            const imgW = 90 * this.scale;
+            const imgH = 100 * this.scale;
+            ctx.drawImage(ASSETS.hero, -imgW/2, -imgH/2, imgW, imgH);
         } else {
             ctx.fillStyle = '#0ff';
             ctx.fillRect(-this.w / 2, -this.h / 2, this.w, this.h);
@@ -631,12 +635,14 @@ class Player extends Entity {
 
 class Enemy extends Entity {
     constructor(x, y, type, lootDrop = null) {
-        super(x, y, 50, 80);
+        const scale = isMobile ? 0.6 : 1; // Mobile: 60% size
+        super(x, y, 50 * scale, 80 * scale);
         this.type = type;
         this.lootDrop = lootDrop;
         this.state = 'CHASE';
         this.stateTimer = 0;
         this.attackTimer = 0;
+        this.scale = scale;
 
         const stats = {
             grunt: { hp: 60, speed: 120, score: 100, coins: 5, w: 70, h: 90 },
@@ -650,7 +656,7 @@ class Enemy extends Entity {
         const s = stats[type] || stats.grunt;
         this.hp = s.hp; this.maxHp = s.hp; this.speed = s.speed;
         this.score = s.score; this.coins = s.coins;
-        this.w = s.w; this.h = s.h;
+        this.w = s.w * scale; this.h = s.h * scale;
     }
 
     update(dt) {
@@ -802,10 +808,10 @@ class Enemy extends Entity {
             if (this.type === 'sniper') { ctx.filter = 'hue-rotate(180deg)'; }
             if (this.type === 'bomber') { ctx.filter = 'hue-rotate(30deg) saturate(2)'; }
             
-            if (this.type === 'beast') ctx.drawImage(img, -80, -70, 160, 140);
-            else if (this.type === 'boss') ctx.drawImage(img, -100, -90, 200, 180);
-            else if (this.type === 'wasp' || this.type === 'bomber') ctx.drawImage(img, -30, -30, 60, 60);
-            else ctx.drawImage(img, -40, -50, 80, 100);
+            if (this.type === 'beast') ctx.drawImage(img, -80 * this.scale, -70 * this.scale, 160 * this.scale, 140 * this.scale);
+            else if (this.type === 'boss') ctx.drawImage(img, -100 * this.scale, -90 * this.scale, 200 * this.scale, 180 * this.scale);
+            else if (this.type === 'wasp' || this.type === 'bomber') ctx.drawImage(img, -30 * this.scale, -30 * this.scale, 60 * this.scale, 60 * this.scale);
+            else ctx.drawImage(img, -40 * this.scale, -50 * this.scale, 80 * this.scale, 100 * this.scale);
             
             ctx.filter = 'none';
         } else {
@@ -984,8 +990,11 @@ class SkillEffect {
 
 class Loot {
     constructor(x, y, type) {
-        this.x = x; this.y = y; this.w = 40; this.h = 40;
+        const scale = isMobile ? 0.7 : 1; // Mobile: 70% size
+        this.x = x; this.y = y; 
+        this.w = 40 * scale; this.h = 40 * scale;
         this.type = type;
+        this.scale = scale;
         this.vx = (Math.random() - 0.5) * 150;
         this.vy = (Math.random() - 0.5) * 150;
     }
@@ -1022,19 +1031,20 @@ class Loot {
         
         // Use actual images
         let img = this.type === 'hp' ? ASSETS.item_hp : (this.type === 'gun' ? ASSETS.item_gun : ASSETS.hero);
+        const size = 40 * this.scale;
         if (img && img.complete && img.naturalWidth > 0) {
-            ctx.drawImage(img, -20, -20, 40, 40);
+            ctx.drawImage(img, -size/2, -size/2, size, size);
         } else {
             ctx.fillStyle = ctx.shadowColor;
-            ctx.fillRect(-20, -20, 40, 40);
+            ctx.fillRect(-size/2, -size/2, size, size);
         }
         
         // Label
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 10px Arial';
+        ctx.font = `bold ${10 * this.scale}px Arial`;
         ctx.textAlign = 'center';
         const labels = { hp: 'HEAL', gun: 'UPGRADE', squad: 'ALLY' };
-        ctx.fillText(labels[this.type] || '', 0, 35);
+        ctx.fillText(labels[this.type] || '', 0, 35 * this.scale);
         ctx.textAlign = 'left';
         
         ctx.restore();
@@ -1326,7 +1336,7 @@ function spawnEnemies(dt) {
         const leader = game.squad[0];
         if (!leader) return;
         const angle = Math.random() * Math.PI * 2;
-        const dist = Math.max(WIDTH, HEIGHT) * 0.6;
+        const dist = Math.max(WIDTH, HEIGHT) * (isMobile ? 0.5 : 0.6); // Closer spawn on mobile
         const sx = leader.x + Math.cos(angle) * dist;
         const sy = leader.y + Math.sin(angle) * dist;
 

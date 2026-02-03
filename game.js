@@ -164,9 +164,8 @@ const Input = {
         active: false, 
         x: 0, 
         y: 0, 
-        targetX: 0, 
-        targetY: 0,
-        touchId: null 
+        worldX: 0, 
+        worldY: 0
     },
     
     init() {
@@ -207,19 +206,21 @@ const Input = {
         window.addEventListener('mouseup', () => { if (!isMobile) this.mouse.down = false; });
 
         // Touch / Mobile - One hand controls
-        if (isMobile) this.initMobileOneHand();
+        this.initMobileOneHand();
     },
 
     initMobileOneHand() {
         const touchIndicator = document.getElementById('touch-indicator');
-        const btnDash = document.getElementById('btn-dash');
-        const btnReload = document.getElementById('btn-reload');
-        const btnPause = document.getElementById('btn-pause');
-
-        // Main touch area (canvas) - tap to move
-        canvas.addEventListener('touchstart', e => {
+        
+        // Touch handlers on document for better capture
+        const handleTouchStart = (e) => {
+            // Check for button touches first
+            if (e.target.closest('.action-btn') || e.target.closest('#btn-pause')) {
+                return; // Let button handlers deal with it
+            }
+            
             if (game.showUpgradeUI) {
-                const touch = e.changedTouches[0];
+                const touch = e.touches[0];
                 const choice = getUpgradeChoiceAt(touch.clientX, touch.clientY);
                 if (choice !== -1) {
                     selectUpgrade(choice);
@@ -230,80 +231,85 @@ const Input = {
             
             if (game.paused || !game.active) return;
             
-            const touch = e.changedTouches[0];
+            const touch = e.touches[0];
             this.touch.active = true;
-            this.touch.touchId = touch.identifier;
             this.touch.x = touch.clientX;
             this.touch.y = touch.clientY;
-            this.touch.targetX = touch.clientX + game.camera.x;
-            this.touch.targetY = touch.clientY + game.camera.y;
+            this.touch.worldX = touch.clientX + game.camera.x;
+            this.touch.worldY = touch.clientY + game.camera.y;
             
             // Show touch indicator
-            touchIndicator.style.left = touch.clientX + 'px';
-            touchIndicator.style.top = touch.clientY + 'px';
-            touchIndicator.classList.add('active');
+            if (touchIndicator) {
+                touchIndicator.style.left = touch.clientX + 'px';
+                touchIndicator.style.top = touch.clientY + 'px';
+                touchIndicator.classList.add('active');
+            }
             
             this.lastMove = performance.now();
             e.preventDefault();
-        }, { passive: false });
+        };
 
-        canvas.addEventListener('touchmove', e => {
-            if (game.paused || !game.active) return;
+        const handleTouchMove = (e) => {
+            if (game.paused || !game.active || !this.touch.active) return;
             
-            for (let touch of e.changedTouches) {
-                if (touch.identifier === this.touch.touchId) {
-                    this.touch.x = touch.clientX;
-                    this.touch.y = touch.clientY;
-                    this.touch.targetX = touch.clientX + game.camera.x;
-                    this.touch.targetY = touch.clientY + game.camera.y;
-                    
-                    // Update indicator
-                    touchIndicator.style.left = touch.clientX + 'px';
-                    touchIndicator.style.top = touch.clientY + 'px';
-                    
-                    this.lastMove = performance.now();
-                }
+            const touch = e.touches[0];
+            this.touch.x = touch.clientX;
+            this.touch.y = touch.clientY;
+            this.touch.worldX = touch.clientX + game.camera.x;
+            this.touch.worldY = touch.clientY + game.camera.y;
+            
+            // Update indicator
+            if (touchIndicator) {
+                touchIndicator.style.left = touch.clientX + 'px';
+                touchIndicator.style.top = touch.clientY + 'px';
             }
+            
+            this.lastMove = performance.now();
             e.preventDefault();
-        }, { passive: false });
+        };
 
-        canvas.addEventListener('touchend', e => {
-            for (let touch of e.changedTouches) {
-                if (touch.identifier === this.touch.touchId) {
-                    this.touch.active = false;
-                    this.touch.touchId = null;
-                    touchIndicator.classList.remove('active');
-                }
-            }
-        }, { passive: false });
-
-        canvas.addEventListener('touchcancel', e => {
+        const handleTouchEnd = (e) => {
             this.touch.active = false;
-            this.touch.touchId = null;
-            touchIndicator.classList.remove('active');
-        }, { passive: false });
+            if (touchIndicator) {
+                touchIndicator.classList.remove('active');
+            }
+        };
 
-        // Dash button
-        btnDash.addEventListener('touchstart', e => {
-            e.preventDefault();
-            e.stopPropagation();
-            const leader = game.squad.find(p => p.isLeader);
-            if (leader && game.active && !game.paused) leader.dash();
-        }, { passive: false });
+        // Add listeners to canvas
+        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+        canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+        canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 
-        // Reload button
-        btnReload.addEventListener('touchstart', e => {
-            e.preventDefault();
-            e.stopPropagation();
-            game.squad.forEach(p => p.reload());
-        }, { passive: false });
+        // Button handlers
+        const btnDash = document.getElementById('btn-dash');
+        const btnReload = document.getElementById('btn-reload');
+        const btnPause = document.getElementById('btn-pause');
 
-        // Pause button
-        btnPause.addEventListener('touchstart', e => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (game.active) game.paused = !game.paused;
-        }, { passive: false });
+        if (btnDash) {
+            btnDash.addEventListener('touchstart', e => {
+                e.preventDefault();
+                e.stopPropagation();
+                const leader = game.squad.find(p => p.isLeader);
+                if (leader && game.active && !game.paused) leader.dash();
+            }, { passive: false });
+        }
+
+        if (btnReload) {
+            btnReload.addEventListener('touchstart', e => {
+                e.preventDefault();
+                e.stopPropagation();
+                game.squad.forEach(p => p.reload());
+            }, { passive: false });
+        }
+
+        if (btnPause) {
+            btnPause.addEventListener('touchstart', e => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (game.active) game.paused = !game.paused;
+            }, { passive: false });
+        }
 
         // Prevent zoom/scroll
         document.addEventListener('touchmove', e => {
@@ -316,10 +322,10 @@ const Input = {
 
     // Get touch target position for movement
     getTouchTarget() {
-        if (isMobile && this.touch.active) {
+        if (this.touch.active) {
             return { 
-                x: this.touch.targetX, 
-                y: this.touch.targetY, 
+                x: this.touch.worldX, 
+                y: this.touch.worldY, 
                 active: true 
             };
         }
@@ -416,25 +422,24 @@ class Player extends Entity {
         if (this.dashTimer > 0 || this.isDashing) return;
         
         let dx, dy;
-        if (isMobile) {
-            // Mobile: dash away from nearest enemy, or in movement direction
-            const nearest = this.getNearestEnemy();
-            if (nearest) {
-                // Dash away from enemy
-                dx = this.x - nearest.x;
-                dy = this.y - nearest.y;
-            } else if (Math.abs(this.vx) > 10 || Math.abs(this.vy) > 10) {
-                // Dash in movement direction
-                dx = this.vx;
-                dy = this.vy;
-            } else {
-                // Default: dash in facing direction
-                dx = this.facingRight ? 1 : -1;
-                dy = 0;
-            }
-        } else {
+        
+        // Try to dash away from nearest enemy first
+        const nearest = this.getNearestEnemy();
+        if (nearest) {
+            dx = this.x - nearest.x;
+            dy = this.y - nearest.y;
+        } else if (Math.abs(this.vx) > 10 || Math.abs(this.vy) > 10) {
+            // Dash in movement direction
+            dx = this.vx;
+            dy = this.vy;
+        } else if (!isMobile) {
+            // Desktop: dash toward mouse
             dx = Input.mouse.x + game.camera.x - (this.x + this.w / 2);
             dy = Input.mouse.y + game.camera.y - (this.y + this.h / 2);
+        } else {
+            // Default: dash in facing direction
+            dx = this.facingRight ? 1 : -1;
+            dy = 0;
         }
         
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -463,14 +468,16 @@ class Player extends Entity {
             this.dashTimer = Math.max(0, this.dashTimer - dt);
             
             if (this.isLeader) {
-                // Mobile: tap to move (one hand)
+                // Check for touch input first (mobile)
                 const touchTarget = Input.getTouchTarget();
-                if (isMobile && touchTarget.active) {
+                
+                if (touchTarget.active) {
+                    // Mobile: tap to move
                     const dx = touchTarget.x - (this.x + this.w / 2);
                     const dy = touchTarget.y - (this.y + this.h / 2);
                     const dist = Math.sqrt(dx * dx + dy * dy);
                     
-                    if (dist > 20) {
+                    if (dist > 30) {
                         this.vx = (dx / dist) * this.speed;
                         this.vy = (dy / dist) * this.speed;
                         this.facingRight = dx > 0;
@@ -492,6 +499,7 @@ class Player extends Entity {
                         this.facingRight = (dx > 0);
                     } else { this.vx = 0; this.vy = 0; }
                 } else {
+                    // Mobile but not touching - stop
                     this.vx = 0; this.vy = 0;
                 }
             } else {
@@ -1631,11 +1639,21 @@ function updateStartScreen() {
 
 function init() {
     loadPersistent();
-    Input.init();
     resize();
+    Input.init();
     updateStartScreen();
     startScreen.querySelector('#start-btn').addEventListener('click', startGame);
     gameOverScreen.querySelector('#restart-btn').addEventListener('click', startGame);
+    
+    // Also handle touch for start/restart buttons
+    startScreen.querySelector('#start-btn').addEventListener('touchend', e => {
+        e.preventDefault();
+        startGame();
+    });
+    gameOverScreen.querySelector('#restart-btn').addEventListener('touchend', e => {
+        e.preventDefault();
+        startGame();
+    });
 }
 
 function startGame() {

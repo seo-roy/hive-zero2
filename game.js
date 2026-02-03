@@ -1,66 +1,4 @@
-function drawCrosshair() {
-    // Mobile: show virtual joystick indicator
-    if (isMobile && Input.touch.active) {
-        // Draw joystick base (where touch started)
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(Input.touch.startX, Input.touch.startY, 50, 0, Math.PI * 2);
-        ctx.stroke();
-        
-        // Draw joystick stick (current position)
-        ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
-        ctx.beginPath();
-        ctx.arc(Input.touch.currentX, Input.touch.currentY, 25, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#0ff';
-        ctx.stroke();
-        
-        // Draw direction line
-        ctx.strokeStyle = 'rgba(0, 255, 255, 0.4)';
-        ctx.beginPath();
-        ctx.moveTo(Input.touch.startX, Input.touch.startY);
-        ctx.lineTo(Input.touch.currentX, Input.touch.currentY);
-        ctx.stroke();
-    }
-    
-    // Show auto-aim target on mobile
-    if (isMobile) {
-        const leader = game.squad[0];
-        if (leader) {
-            const target = leader.getNearestEnemy();
-            if (target) {
-                const tx = target.x + target.w / 2 - game.camera.x;
-                const ty = target.y + target.h / 2 - game.camera.y;
-                
-                ctx.strokeStyle = '#f66';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(tx, ty, 25 + Math.sin(game.time * 8) * 5, 0, Math.PI * 2);
-                ctx.stroke();
-            }
-        }
-        return;
-    }
-
-    // Desktop crosshair
-    const leader = game.squad[0];
-    ctx.strokeStyle = leader && leader.dashTimer <= 0 ? '#0ff' : '#066';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(Input.mouse.x, Input.mouse.y, 15, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(Input.mouse.x - 22, Input.mouse.y); ctx.lineTo(Input.mouse.x - 8, Input.mouse.y);
-    ctx.moveTo(Input.mouse.x + 8, Input.mouse.y); ctx.lineTo(Input.mouse.x + 22, Input.mouse.y);
-    ctx.moveTo(Input.mouse.x, Input.mouse.y - 22); ctx.lineTo(Input.mouse.x, Input.mouse.y - 8);
-    ctx.moveTo(Input.mouse.x, Input.mouse.y + 8); ctx.lineTo(Input.mouse.x, Input.mouse.y + 22);
-    ctx.stroke();
-    if (leader && leader.dashTimer <= 0) {
-        ctx.fillStyle = '#0ff';
-        ctx.beginPath(); ctx.arc(Input.mouse.x, Input.mouse.y, 3, 0, Math.PI * 2); ctx.fill();
-    }
-}const canvas = document.getElementById('gameCanvas');
+const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 const startScreen = document.getElementById('start-screen');
@@ -228,10 +166,14 @@ const Input = {
         canvas.addEventListener('touchstart', function(e) {
             e.preventDefault();
             
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const canvasX = touch.clientX - rect.left;
+            const canvasY = touch.clientY - rect.top;
+            
             // Check upgrade UI first
             if (game.showUpgradeUI) {
-                const touch = e.touches[0];
-                const choice = getUpgradeChoiceAt(touch.clientX, touch.clientY);
+                const choice = getUpgradeChoiceAt(canvasX, canvasY);
                 if (choice !== -1) {
                     selectUpgrade(choice);
                     return;
@@ -240,18 +182,16 @@ const Input = {
             
             if (game.paused || !game.active) return;
             
-            const touch = e.touches[0];
-            
             // Start virtual joystick at touch position
             self.touch.active = true;
-            self.touch.startX = touch.clientX;
-            self.touch.startY = touch.clientY;
-            self.touch.currentX = touch.clientX;
-            self.touch.currentY = touch.clientY;
+            self.touch.startX = canvasX;
+            self.touch.startY = canvasY;
+            self.touch.currentX = canvasX;
+            self.touch.currentY = canvasY;
             self.touch.dirX = 0;
             self.touch.dirY = 0;
             
-            debugText = 'START: ' + Math.round(touch.clientX) + ', ' + Math.round(touch.clientY);
+            debugText = 'START: ' + Math.round(canvasX) + ', ' + Math.round(canvasY);
         }, { passive: false });
         
         canvas.addEventListener('touchmove', function(e) {
@@ -260,12 +200,16 @@ const Input = {
             if (!self.touch.active || game.paused || !game.active) return;
             
             const touch = e.touches[0];
-            self.touch.currentX = touch.clientX;
-            self.touch.currentY = touch.clientY;
+            const rect = canvas.getBoundingClientRect();
+            const canvasX = touch.clientX - rect.left;
+            const canvasY = touch.clientY - rect.top;
+            
+            self.touch.currentX = canvasX;
+            self.touch.currentY = canvasY;
             
             // Calculate direction from start point
-            const dx = touch.clientX - self.touch.startX;
-            const dy = touch.clientY - self.touch.startY;
+            const dx = canvasX - self.touch.startX;
+            const dy = canvasY - self.touch.startY;
             const dist = Math.sqrt(dx * dx + dy * dy);
             
             if (dist > 5) { // Dead zone
@@ -1509,23 +1453,44 @@ function drawPostProcessing() {
 }
 
 function drawCrosshair() {
-    // Hide crosshair on mobile (use aim joystick instead)
+    // Mobile: show virtual joystick indicator
+    if (isMobile && Input.touch.active) {
+        // Draw joystick base (where touch started)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(Input.touch.startX, Input.touch.startY, 50, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Draw joystick stick (current position)
+        ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
+        ctx.beginPath();
+        ctx.arc(Input.touch.currentX, Input.touch.currentY, 25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#0ff';
+        ctx.stroke();
+        
+        // Draw direction line
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.4)';
+        ctx.beginPath();
+        ctx.moveTo(Input.touch.startX, Input.touch.startY);
+        ctx.lineTo(Input.touch.currentX, Input.touch.currentY);
+        ctx.stroke();
+    }
+    
+    // Show auto-aim target on mobile
     if (isMobile) {
-        // Draw aim indicator only when aiming
-        const aimDir = Input.getAimDir();
-        if (aimDir.active && (Math.abs(aimDir.x) > 0.1 || Math.abs(aimDir.y) > 0.1)) {
-            const leader = game.squad[0];
-            if (leader) {
-                const aimX = WIDTH / 2 + aimDir.x * 100;
-                const aimY = HEIGHT / 2 + aimDir.y * 100;
+        const leader = game.squad[0];
+        if (leader) {
+            const target = leader.getNearestEnemy();
+            if (target) {
+                const tx = target.x + target.w / 2 - game.camera.x;
+                const ty = target.y + target.h / 2 - game.camera.y;
+                
                 ctx.strokeStyle = '#f66';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.moveTo(WIDTH / 2, HEIGHT / 2);
-                ctx.lineTo(aimX, aimY);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.arc(aimX, aimY, 10, 0, Math.PI * 2);
+                ctx.arc(tx, ty, 25 + Math.sin(game.time * 8) * 5, 0, Math.PI * 2);
                 ctx.stroke();
             }
         }
@@ -1558,7 +1523,6 @@ function drawHUD() {
         ctx.font = 'bold 16px monospace';
         ctx.fillText(debugText, 10, 60);
         ctx.fillText('Touch Active: ' + Input.touch.active, 10, 80);
-        ctx.fillText('World: ' + Math.round(Input.touch.worldX) + ', ' + Math.round(Input.touch.worldY), 10, 100);
     }
 
     // Combo display

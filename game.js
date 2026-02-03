@@ -1303,7 +1303,7 @@ class SkillEffect {
         this.hitList = []; this.owner = null;
         const scrMax = Math.max(WIDTH, HEIGHT);
         this.maxRadius = type === 'SHOCKWAVE' ? scrMax * 0.5 : scrMax * 1.2;
-        this.maxLife = type === 'NOVA' ? 3.0 : (type === 'CHAINLIGHTNING' ? 1.0 : 0.6);
+        this.maxLife = type === 'NOVA' ? 3.0 : (type === 'CHAINLIGHTNING' ? 0.4 : 0.6);
         
         // Chain Lightning properties
         if (type === 'CHAINLIGHTNING') {
@@ -1311,7 +1311,6 @@ class SkillEffect {
             this.chainBuilt = false;
             this.maxChains = 5;
             this.chainRange = 300;
-            this.lightningPaths = [];
         }
     }
     
@@ -1330,7 +1329,6 @@ class SkillEffect {
                 }
             });
         } else if (this.type === 'CHAINLIGHTNING') {
-            // Build chain on first frame
             if (!this.chainBuilt) {
                 this.chainBuilt = true;
                 
@@ -1338,7 +1336,6 @@ class SkillEffect {
                 let lastY = this.y;
                 const hitEnemies = [];
                 
-                // Find up to maxChains enemies
                 for (let i = 0; i < this.maxChains; i++) {
                     let nearest = null;
                     let minDist = this.chainRange;
@@ -1358,25 +1355,20 @@ class SkillEffect {
                         const ex = nearest.x + nearest.w / 2;
                         const ey = nearest.y + nearest.h / 2;
                         
-                        // Store chain path
                         this.chainTargets.push({
                             startX: lastX,
                             startY: lastY,
                             endX: ex,
-                            endY: ey,
-                            enemy: nearest
+                            endY: ey
                         });
                         
                         hitEnemies.push(nearest);
-                        
-                        // Deal damage
                         const dmgMult = 1 - i * 0.1;
                         nearest.takeDamage(this.damage * dmgMult);
                         
-                        // Spark effect
-                        for (let j = 0; j < 8; j++) {
+                        for (let j = 0; j < 4; j++) {
                             const spark = new Particle(ex, ey, '#aaf');
-                            spark.life = 0.4;
+                            spark.life = 0.3;
                             game.particles.push(spark);
                         }
                         
@@ -1416,16 +1408,14 @@ class SkillEffect {
             ctx.shadowColor = '#0ff'; 
             ctx.stroke();
         } else if (this.type === 'CHAINLIGHTNING') {
-            ctx.globalAlpha = Math.max(0.2, a);
+            ctx.globalAlpha = Math.max(0.3, a);
             
-            // Draw each chain segment
-            this.chainTargets.forEach((chain, idx) => {
-                // Generate jagged lightning path
+            this.chainTargets.forEach((chain) => {
                 const points = [];
                 const dx = chain.endX - chain.startX;
                 const dy = chain.endY - chain.startY;
                 const dist = Math.sqrt(dx * dx + dy * dy);
-                const segments = Math.max(4, Math.floor(dist / 25));
+                const segments = Math.max(3, Math.floor(dist / 35));
                 
                 points.push({x: chain.startX, y: chain.startY});
                 
@@ -1434,10 +1424,9 @@ class SkillEffect {
                     let px = chain.startX + dx * t;
                     let py = chain.startY + dy * t;
                     
-                    // Add perpendicular jitter
                     const perpX = -dy / dist;
                     const perpY = dx / dist;
-                    const jitter = (Math.random() - 0.5) * 50;
+                    const jitter = (Math.random() - 0.5) * 30;
                     px += perpX * jitter;
                     py += perpY * jitter;
                     
@@ -1445,11 +1434,11 @@ class SkillEffect {
                 }
                 points.push({x: chain.endX, y: chain.endY});
                 
-                // Draw glow
-                ctx.strokeStyle = '#66f';
-                ctx.lineWidth = 10;
-                ctx.shadowBlur = 30;
-                ctx.shadowColor = '#88f';
+                // Thin glow
+                ctx.strokeStyle = '#88f';
+                ctx.lineWidth = 4;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#aaf';
                 ctx.beginPath();
                 ctx.moveTo(points[0].x, points[0].y);
                 for (let i = 1; i < points.length; i++) {
@@ -1457,10 +1446,10 @@ class SkillEffect {
                 }
                 ctx.stroke();
                 
-                // Draw bright core
+                // Thin bright core
                 ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 4;
-                ctx.shadowBlur = 15;
+                ctx.lineWidth = 1.5;
+                ctx.shadowBlur = 5;
                 ctx.shadowColor = '#fff';
                 ctx.beginPath();
                 ctx.moveTo(points[0].x, points[0].y);
@@ -1469,12 +1458,12 @@ class SkillEffect {
                 }
                 ctx.stroke();
                 
-                // Draw impact circle at end point
+                // Small impact circle
                 ctx.fillStyle = '#fff';
-                ctx.shadowBlur = 25;
+                ctx.shadowBlur = 10;
                 ctx.shadowColor = '#aaf';
                 ctx.beginPath();
-                ctx.arc(chain.endX, chain.endY, 12, 0, Math.PI * 2);
+                ctx.arc(chain.endX, chain.endY, 6, 0, Math.PI * 2);
                 ctx.fill();
             });
             

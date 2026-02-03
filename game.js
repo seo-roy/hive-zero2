@@ -338,7 +338,7 @@ class Player extends Entity {
         super(x, y, 60 * scale, 90 * scale);
         this.isLeader = isLeader;
         this.followTarget = followTarget;
-        this.speed = 300 * (1 + persistent.upgrades.speed * 0.03);
+        this.speed = 200 * (1 + persistent.upgrades.speed * 0.03); // 300 -> 200으로 감소
         this.scale = scale;
         this.weapon = 'rifle';
         this.fireRate = WEAPONS.rifle.fireRate;
@@ -358,7 +358,7 @@ class Player extends Entity {
         this.dashTimer = 0;
         this.isDashing = false;
         this.dashDuration = 0.15;
-        this.dashSpeed = 1200;
+        this.dashSpeed = 800; // 1200 -> 800으로 감소
         this.dashDir = { x: 0, y: 0 };
         this.hasRegen = false;
         this.piercing = 0;
@@ -645,12 +645,12 @@ class Enemy extends Entity {
         this.scale = scale;
 
         const stats = {
-            grunt: { hp: 60, speed: 120, score: 100, coins: 5, w: 70, h: 90 },
-            wasp: { hp: 30, speed: 250, score: 150, coins: 8, w: 50, h: 50 },
-            beast: { hp: 400, speed: 70, score: 1000, coins: 50, w: 150, h: 130 },
-            sniper: { hp: 40, speed: 80, score: 200, coins: 15, w: 60, h: 80 },
-            bomber: { hp: 50, speed: 200, score: 250, coins: 20, w: 50, h: 50 },
-            boss: { hp: 2000, speed: 60, score: 5000, coins: 200, w: 200, h: 180 }
+            grunt: { hp: 60, speed: 100, score: 100, coins: 5, w: 70, h: 90 }, // 120 -> 100
+            wasp: { hp: 30, speed: 200, score: 150, coins: 8, w: 50, h: 50 }, // 250 -> 200
+            beast: { hp: 400, speed: 60, score: 1000, coins: 50, w: 150, h: 130 }, // 70 -> 60
+            sniper: { hp: 40, speed: 70, score: 200, coins: 15, w: 60, h: 80 }, // 80 -> 70
+            bomber: { hp: 50, speed: 180, score: 250, coins: 20, w: 50, h: 50 }, // 200 -> 180
+            boss: { hp: 2000, speed: 50, score: 5000, coins: 200, w: 200, h: 180 } // 60 -> 50
         };
 
         const s = stats[type] || stats.grunt;
@@ -1289,9 +1289,9 @@ window.addEventListener('resize', resize);
 
 function generateEnvironment() {
     game.environmentObjects = [];
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 30; i++) { // 40 -> 30으로 감소
         game.environmentObjects.push(new EnvironmentObject(
-            (Math.random() - 0.5) * 4000, (Math.random() - 0.5) * 4000,
+            (Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000, // 4000 -> 2000으로 맵 크기 축소
             Math.random() > 0.5 ? 'debris' : 'rubble'
         ));
     }
@@ -1301,8 +1301,8 @@ function spawnEnemies(dt) {
     if (game.state !== 'COMBAT' || game.paused) return;
     
     const isBossWave = game.wave % 5 === 0;
-    const baseCount = 8 + game.wave * 4;
-    const limit = isBossWave ? 1 : Math.min(baseCount, 60);
+    const baseCount = 12 + game.wave * 6; // 8 + wave*4 -> 12 + wave*6 (더 많이 스폰)
+    const limit = isBossWave ? 1 : Math.min(baseCount, 80); // 60 -> 80으로 증가
 
     if (game.enemiesSpawned >= limit && game.entities.filter(e => e instanceof Enemy).length === 0) {
         showUpgradeSelection();
@@ -1313,7 +1313,7 @@ function spawnEnemies(dt) {
 
     game.spawnTimer -= dt;
     if (game.spawnTimer <= 0) {
-        game.spawnTimer = isBossWave ? 0 : Math.max(0.2, 6.0 / limit);
+        game.spawnTimer = isBossWave ? 0 : Math.max(0.15, 4.0 / limit); // 0.2, 6.0 -> 0.15, 4.0 (더 빠르게 스폰)
 
         let type = 'grunt';
         if (isBossWave) type = 'boss';
@@ -1336,7 +1336,7 @@ function spawnEnemies(dt) {
         const leader = game.squad[0];
         if (!leader) return;
         const angle = Math.random() * Math.PI * 2;
-        const dist = Math.max(WIDTH, HEIGHT) * (isMobile ? 0.5 : 0.6); // Closer spawn on mobile
+        const dist = Math.max(WIDTH, HEIGHT) * 0.45; // 0.5/0.6 -> 0.45 (더 가까이 스폰)
         const sx = leader.x + Math.cos(angle) * dist;
         const sy = leader.y + Math.sin(angle) * dist;
 

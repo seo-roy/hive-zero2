@@ -73,7 +73,7 @@ let game = {
     upgradeChoices: [], showUpgradeUI: false,
     combo: 0, comboTimer: 0, maxCombo: 0,
     lootMagnet: 100, warnings: [], killsThisWave: 0,
-    difficulty: 1.0 // Dynamic difficulty
+    difficulty: 1.0
 };
 
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
@@ -281,6 +281,7 @@ class Player extends Entity {
         this.skillTimer = 0;
         this.skillCooldown = 1.0;
         this.skillLevel = 1;
+        this.skillTimer = 0;
         this.footprintTimer = 0;
         this.dashCooldown = 1.5;
         this.dashTimer = 0;
@@ -369,7 +370,6 @@ class Player extends Entity {
                     const dx = this.followTarget.x - this.x;
                     const dy = this.followTarget.y - this.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
-                    // Follow if too far (reduced threshold from 80 to 50)
                     if (dist > 50) {
                         this.vx = (dx / dist) * this.speed * 1.2;
                         this.vy = (dy / dist) * this.speed * 1.2;
@@ -379,7 +379,6 @@ class Player extends Entity {
                         this.vy = 0; 
                     }
                 } else {
-                    // No follow target or target dead - follow leader directly
                     const leader = game.squad.find(p => p.isLeader && !p.dead);
                     if (leader && leader !== this) {
                         const dx = leader.x - this.x;
@@ -426,14 +425,10 @@ class Player extends Entity {
         }
 
         if (this.skillType) {
-            if (isNaN(this.skillTimer)) this.skillTimer = 0;
             this.skillTimer -= dt;
             if (this.skillTimer <= 0) {
-                const hasEnemies = game.entities.some(e => e instanceof Enemy && !e.dead);
-                if (hasEnemies || this.skillType === 'HEAL') {
-                    this.triggerSkill();
-                    this.skillTimer = this.skillCooldown;
-                }
+                this.triggerSkill();
+                this.skillTimer = this.skillCooldown;
             }
         }
         this.applyGravity(dt);
@@ -451,11 +446,10 @@ class Player extends Entity {
             const angle = target ? Math.atan2(target.y + target.h/2 - cy, target.x + target.w/2 - cx) : (this.facingRight ? 0 : Math.PI);
             game.skillEffects.push(new SkillEffect(cx, cy, 'SHOCKWAVE', this.bulletDamage * 0.4, angle));
         } else if (this.skillType === 'CHAINLIGHTNING') {
-            // Chain Lightning - hits up to 5 enemies in sequence
             const chainEffect = new SkillEffect(cx, cy, 'CHAINLIGHTNING', this.bulletDamage * 0.6);
             chainEffect.owner = this;
             chainEffect.maxChains = 5;
-            chainEffect.chainRange = 250;
+            chainEffect.chainRange = 700;
             game.skillEffects.push(chainEffect);
         } else if (this.skillType === 'HEAL') {
             game.squad.forEach(m => { if (!m.dead) m.hp = Math.min(m.maxHp, m.hp + 25); });
@@ -536,7 +530,6 @@ class Player extends Entity {
         ctx.translate(cx, cy);
         if (!this.facingRight) ctx.scale(-1, 1);
 
-        // Leader glow effect only (no size change, no ring)
         if (this.isLeader) {
             ctx.shadowBlur = 30 + Math.sin(game.time * 6) * 15;
             ctx.shadowColor = '#0ff';
@@ -569,7 +562,6 @@ class Player extends Entity {
     }
 }
 
-// Enhanced Enemy AI
 class Enemy extends Entity {
     constructor(x, y, type, lootDrop = null) {
         const scale = isMobile ? 0.6 : 1;
@@ -581,7 +573,6 @@ class Enemy extends Entity {
         this.attackTimer = 0;
         this.scale = scale;
         
-        // Enhanced AI properties
         this.aiTimer = 0;
         this.flankAngle = 0;
         this.dodgeTimer = 0;
@@ -589,13 +580,11 @@ class Enemy extends Entity {
         this.chargeTimer = 0;
         this.isCharging = false;
         this.zigzagPhase = Math.random() * Math.PI * 2;
-        this.groupId = Math.floor(Math.random() * 3); // For coordinated attacks
+        this.groupId = Math.floor(Math.random() * 3);
         this.aggressionLevel = 0.5 + Math.random() * 0.5;
         this.lastPlayerPos = { x: 0, y: 0 };
         this.predictedPos = { x: 0, y: 0 };
 
-        // Difficulty scaling - gradual increase, harder late game
-        // Wave 1-3: Easy, Wave 4-7: Medium, Wave 8-10: Hard, Wave 11+: Very Hard
         const waveBonus = game.wave <= 3 ? 1 + (game.wave - 1) * 0.05 : 
                           game.wave <= 7 ? 1.1 + (game.wave - 3) * 0.15 :
                           game.wave <= 10 ? 1.7 + (game.wave - 7) * 0.25 :
@@ -616,7 +605,6 @@ class Enemy extends Entity {
         this.w = s.w * scale; this.h = s.h * scale;
     }
 
-    // Predict player movement
     predictPlayerPosition(target, dt) {
         const predictionTime = 0.5;
         return {
@@ -625,7 +613,6 @@ class Enemy extends Entity {
         };
     }
 
-    // Check if bullet is heading toward this enemy
     checkIncomingBullets() {
         for (const p of game.projectiles) {
             if (!p.isPlayer) continue;
@@ -634,7 +621,6 @@ class Enemy extends Entity {
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist > 300) continue;
             
-            // Check if bullet is heading toward us
             const bulletAngle = Math.atan2(p.vy, p.vx);
             const toEnemyAngle = Math.atan2(dy, dx);
             let angleDiff = Math.abs(bulletAngle - toEnemyAngle);
@@ -663,10 +649,8 @@ class Enemy extends Entity {
         const dist = Math.sqrt(dx * dx + dy * dy);
         const dirX = dx / dist, dirY = dy / dist;
 
-        // Update predicted position
         this.predictedPos = this.predictPlayerPosition(target, dt);
 
-        // Check for incoming bullets and dodge
         const bulletCheck = this.checkIncomingBullets();
         if (bulletCheck.dodge && this.dodgeTimer <= 0 && Math.random() < 0.7) {
             this.dodgeTimer = 0.3;
@@ -674,7 +658,6 @@ class Enemy extends Entity {
             this.dodgeDir = { x: Math.cos(perpAngle), y: Math.sin(perpAngle) };
         }
 
-        // Apply dodge movement
         if (this.dodgeTimer > 0) {
             this.dodgeTimer -= dt;
             this.vx = this.dodgeDir.x * this.speed * 2;
@@ -685,7 +668,6 @@ class Enemy extends Entity {
 
         this.aiTimer -= dt;
 
-        // Type-specific enhanced AI
         if (this.type === 'grunt') {
             this.updateGruntAI(dt, target, dist, dirX, dirY);
         } else if (this.type === 'wasp') {
@@ -707,7 +689,6 @@ class Enemy extends Entity {
     updateGruntAI(dt, target, dist, dirX, dirY) {
         this.stateTimer -= dt;
         
-        // Coordinated group behavior
         const nearbyGrunts = game.entities.filter(e => 
             e instanceof Enemy && e.type === 'grunt' && !e.dead && e !== this &&
             Math.sqrt((e.x - this.x)**2 + (e.y - this.y)**2) < 200
@@ -716,13 +697,11 @@ class Enemy extends Entity {
         if (this.stateTimer <= 0) {
             this.stateTimer = 0.8 + Math.random() * 1.2;
             
-            // More aggressive state selection
             if (dist < 100) {
                 this.state = 'ATTACK';
             } else if (dist < 250 && nearbyGrunts.length >= 2) {
-                // Flanking maneuver when in groups
                 this.state = 'FLANK';
-                this.flankAngle = (this.groupId - 1) * Math.PI / 3; // Spread out
+                this.flankAngle = (this.groupId - 1) * Math.PI / 3;
             } else if (dist > 400) {
                 this.state = 'CHASE';
             } else {
@@ -737,7 +716,6 @@ class Enemy extends Entity {
         const speedMult = this.state === 'CHARGE' ? 1.8 : 1;
 
         if (this.state === 'CHASE' || this.state === 'CHARGE') {
-            // Aim at predicted position
             const pdx = this.predictedPos.x - this.x;
             const pdy = this.predictedPos.y - this.y;
             const pdist = Math.sqrt(pdx * pdx + pdy * pdy);
@@ -758,7 +736,6 @@ class Enemy extends Entity {
         this.vx = tx * this.speed * speedMult;
         this.vy = ty * this.speed * speedMult;
 
-        // Melee attack
         if (dist < 70) {
             this.attackTimer -= dt;
             if (this.attackTimer <= 0) {
@@ -772,7 +749,6 @@ class Enemy extends Entity {
     updateWaspAI(dt, target, dist, dirX, dirY) {
         this.zigzagPhase += dt * 8;
         
-        // Zigzag approach with dive attacks
         if (this.state !== 'DIVE' && dist < 300 && Math.random() < 0.02) {
             this.state = 'DIVE';
             this.chargeTimer = 0.5;
@@ -780,7 +756,6 @@ class Enemy extends Entity {
 
         if (this.state === 'DIVE') {
             this.chargeTimer -= dt;
-            // Fast dive toward predicted position
             const pdx = this.predictedPos.x - this.x;
             const pdy = this.predictedPos.y - this.y;
             const pdist = Math.sqrt(pdx * pdx + pdy * pdy);
@@ -797,14 +772,12 @@ class Enemy extends Entity {
             this.vy = -dirY * this.speed;
             if (this.stateTimer <= 0) this.state = 'APPROACH';
         } else {
-            // Zigzag approach
             const zigzag = Math.sin(this.zigzagPhase) * 0.8;
             const perpX = -dirY, perpY = dirX;
             this.vx = (dirX + perpX * zigzag) * this.speed;
             this.vy = (dirY + perpY * zigzag) * this.speed;
         }
 
-        // Quick hit-and-run attack
         if (dist < 60) {
             this.attackTimer -= dt;
             if (this.attackTimer <= 0) {
@@ -822,9 +795,8 @@ class Enemy extends Entity {
         if (this.state !== 'CHARGE' && this.stateTimer <= 0) {
             if (dist < 400 && dist > 150) {
                 this.state = 'CHARGE';
-                this.chargeTimer = 0.3; // Wind-up
+                this.chargeTimer = 0.3;
                 this.isCharging = false;
-                // Warning effect
                 game.warnings.push(new Warning(this.x, this.y, 'charge'));
             } else if (dist <= 150) {
                 this.state = 'ATTACK';
@@ -838,22 +810,18 @@ class Enemy extends Entity {
         if (this.state === 'CHARGE') {
             this.chargeTimer -= dt;
             if (this.chargeTimer > 0) {
-                // Wind-up: slow down and glow
                 this.vx = dirX * this.speed * 0.2;
                 this.vy = dirY * this.speed * 0.2;
             } else if (!this.isCharging) {
-                // Start charge
                 this.isCharging = true;
                 this.chargeDir = { x: dirX, y: dirY };
                 this.chargeTimer = 1.5;
                 game.shake = 8;
             } else {
-                // Charging!
                 this.vx = this.chargeDir.x * this.speed * 3;
                 this.vy = this.chargeDir.y * this.speed * 3;
                 this.chargeTimer -= dt;
                 
-                // Damage on collision during charge
                 if (dist < 80) {
                     target.takeDamage(this.damage * 1.5);
                     this.state = 'RECOVER';
@@ -886,7 +854,6 @@ class Enemy extends Entity {
     }
 
     updateSniperAI(dt, target, dist, dirX, dirY) {
-        // Maintain optimal distance and predict shots
         const optimalDist = 350;
         
         if (dist < optimalDist - 50) {
@@ -896,7 +863,6 @@ class Enemy extends Entity {
             this.vx = dirX * this.speed;
             this.vy = dirY * this.speed;
         } else {
-            // Strafe while aiming
             const strafe = Math.sin(game.time * 2) * 0.5;
             this.vx = -dirY * this.speed * strafe;
             this.vy = dirX * this.speed * strafe;
@@ -904,14 +870,12 @@ class Enemy extends Entity {
 
         this.attackTimer -= dt;
         if (this.attackTimer <= 0 && dist < 500) {
-            // Lead the shot
             const bulletSpeed = 900;
             const timeToHit = dist / bulletSpeed;
             const leadX = target.x + target.vx * timeToHit;
             const leadY = target.y + target.vy * timeToHit;
             const angle = Math.atan2(leadY - this.y - this.h/2, leadX - this.x - this.w/2);
             
-            // Fire burst of 2
             for (let i = 0; i < 2; i++) {
                 setTimeout(() => {
                     if (!this.dead) {
@@ -928,10 +892,8 @@ class Enemy extends Entity {
     }
 
     updateBomberAI(dt, target, dist, dirX, dirY) {
-        // Aggressive chase with speed boost when close
         const speedMult = dist < 200 ? 1.5 : 1;
         
-        // Aim at predicted position
         const pdx = this.predictedPos.x - this.x;
         const pdy = this.predictedPos.y - this.y;
         const pdist = Math.sqrt(pdx * pdx + pdy * pdy);
@@ -966,7 +928,6 @@ class Enemy extends Entity {
             this.vy *= 0.95;
         }
 
-        // Melee damage
         if (dist < 120) {
             this.attackTimer -= dt;
             if (this.attackTimer <= 0) {
@@ -976,7 +937,6 @@ class Enemy extends Entity {
             }
         }
 
-        // Special attacks
         if (this.attackTimer <= 0) {
             this.bossAttack(target);
             this.attackTimer = 1.0 + Math.random() * 0.5;
@@ -1001,16 +961,14 @@ class Enemy extends Entity {
         const pattern = Math.floor(Math.random() * 5);
         
         if (pattern === 0) {
-            // Wide spread
             const a = Math.atan2(target.y - cy, target.x - cx);
             for (let i = 0; i < 9; i++) {
                 const p = new Projectile(cx, cy, a - 0.6 + i * 0.15, 400, 15, false, 8, '#f00');
                 p.isBossProjectile = true;
-                p.life = 10; // Long life - travels until off screen
+                p.life = 10;
                 game.projectiles.push(p);
             }
         } else if (pattern === 1) {
-            // Spiral burst
             for (let i = 0; i < 16; i++) {
                 setTimeout(() => {
                     if (!this.dead) {
@@ -1022,7 +980,6 @@ class Enemy extends Entity {
                 }, i * 50);
             }
         } else if (pattern === 2) {
-            // Homing missiles
             for (let i = 0; i < 4; i++) {
                 const p = new Projectile(cx, cy, Math.atan2(target.y - cy, target.x - cx) + (i - 1.5) * 0.4, 200, 18, false, 10, '#f80');
                 p.homing = true;
@@ -1032,14 +989,12 @@ class Enemy extends Entity {
                 game.projectiles.push(p);
             }
         } else if (pattern === 3) {
-            // Summon minions
             for (let i = 0; i < 3; i++) {
                 const a = Math.random() * Math.PI * 2;
                 const type = Math.random() > 0.5 ? 'wasp' : 'bomber';
                 game.entities.push(new Enemy(cx + Math.cos(a) * 100, cy + Math.sin(a) * 100, type));
             }
         } else {
-            // Ring of death
             for (let i = 0; i < 20; i++) {
                 const p = new Projectile(cx, cy, i * Math.PI / 10, 250, 10, false, 5, '#f0f');
                 p.isBossProjectile = true;
@@ -1086,7 +1041,6 @@ class Enemy extends Entity {
         ctx.translate(cx, cy);
         if (!this.facingRight) ctx.scale(-1, 1);
 
-        // Charge warning glow for beast
         if (this.type === 'beast' && this.state === 'CHARGE' && this.chargeTimer > 0 && !this.isCharging) {
             ctx.shadowBlur = 30;
             ctx.shadowColor = '#f00';
@@ -1133,7 +1087,6 @@ class Enemy extends Entity {
             ctx.strokeRect(-this.w/2 - 2, -this.h/2 - 2, this.w + 4, this.h + 4);
         }
 
-        // HP Bar
         ctx.fillStyle = '#500';
         ctx.fillRect(-this.w/2, -this.h/2 - 12, this.w, 8);
         ctx.fillStyle = this.type === 'boss' ? '#f0f' : '#0f0';
@@ -1157,7 +1110,7 @@ class Projectile {
         this.trail = [];
         this.piercing = 0; this.hitList = [];
         this.explosive = false; this.isCrit = false;
-    }
+}
 
     update(dt) {
         this.trail.push({ x: this.x, y: this.y, life: 0.1 });
@@ -1177,14 +1130,12 @@ class Projectile {
                 this.vx = Math.cos(ca) * this.speed;
                 this.vy = Math.sin(ca) * this.speed;
             } else {
-                // No valid target - disable homing
                 this.homing = false;
             }
         }
         this.x += this.vx * dt; this.y += this.vy * dt;
         this.life -= dt;
         
-        // Boss projectiles only removed when far off screen
         if (this.isBossProjectile) {
             const margin = 500;
             if (this.x < game.camera.x - margin || this.x > game.camera.x + WIDTH + margin ||
@@ -1215,21 +1166,18 @@ class Projectile {
             const radius = w.explosionRadius || 180;
             game.shake = 20;
             
-            // Screen flash effect
             game.explosionFlash = 0.15;
             
             game.entities.forEach(e => {
                 if (e.dead || this.hitList.includes(e)) return;
                 const dist = Math.sqrt((e.x + e.w/2 - this.x)**2 + (e.y + e.h/2 - this.y)**2);
                 if (dist < radius) {
-                    // Damage falloff based on distance
                     const falloff = 1 - (dist / radius) * 0.5;
                     e.takeDamage(this.damage * falloff, this.isCrit);
                     this.hitList.push(e);
                 }
             });
             
-            // Big explosion particles
             for (let i = 0; i < 40; i++) {
                 const p = new Particle(this.x, this.y, ['#f80', '#ff0', '#f00', '#fff'][Math.floor(Math.random() * 4)]);
                 p.vx *= 1.5;
@@ -1238,7 +1186,6 @@ class Projectile {
                 game.particles.push(p);
             }
             
-            // Smoke ring
             for (let i = 0; i < 12; i++) {
                 const angle = (i / 12) * Math.PI * 2;
                 const smoke = new Particle(this.x + Math.cos(angle) * 30, this.y + Math.sin(angle) * 30, '#555');
@@ -1248,13 +1195,11 @@ class Projectile {
                 game.particles.push(smoke);
             }
             
-            // Add explosion ring effect
             game.skillEffects.push(new ExplosionRing(this.x, this.y, radius));
         }
     }
 }
 
-// Explosion ring visual effect
 class ExplosionRing {
     constructor(x, y, radius) {
         this.x = x; this.y = y;
@@ -1274,14 +1219,12 @@ class ExplosionRing {
         ctx.save();
         ctx.globalAlpha = alpha;
         
-        // Outer ring
         ctx.strokeStyle = '#f80';
         ctx.lineWidth = 8 * (1 - p);
         ctx.beginPath();
         ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
         ctx.stroke();
         
-        // Inner glow
         const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, r);
         gradient.addColorStop(0, `rgba(255, 200, 50, ${alpha * 0.5})`);
         gradient.addColorStop(0.5, `rgba(255, 100, 0, ${alpha * 0.3})`);
@@ -1295,22 +1238,29 @@ class ExplosionRing {
     }
 }
 
+function isOnScreen(entity) {
+    const margin = 100;
+    return entity.x + entity.w > game.camera.x - margin &&
+           entity.x < game.camera.x + WIDTH + margin &&
+           entity.y + entity.h > game.camera.y - margin &&
+           entity.y < game.camera.y + HEIGHT + margin;
+}
+
 class SkillEffect {
     constructor(x, y, type, damage, angle = 0) {
         this.x = x; this.y = y; this.type = type;
         this.damage = damage; this.angle = angle;
         this.life = 0; this.remove = false;
         this.hitList = []; this.owner = null;
-        const scrMax = Math.max(WIDTH, HEIGHT);
+        const scrMax = Math.max(WIDTH || 800, HEIGHT || 600);
         this.maxRadius = type === 'SHOCKWAVE' ? scrMax * 0.5 : scrMax * 1.2;
-        this.maxLife = type === 'NOVA' ? 3.0 : (type === 'CHAINLIGHTNING' ? 0.4 : 0.6);
+        this.maxLife = type === 'NOVA' ? 3.0 : (type === 'CHAINLIGHTNING' ? 0.5 : 0.6);
         
-        // Chain Lightning properties
         if (type === 'CHAINLIGHTNING') {
             this.chainTargets = [];
             this.chainBuilt = false;
             this.maxChains = 5;
-            this.chainRange = 300;
+            this.chainRange = 500;
         }
     }
     
@@ -1323,6 +1273,7 @@ class SkillEffect {
             const r = this.maxRadius * p;
             game.entities.forEach(e => {
                 if (e.dead || this.hitList.includes(e)) return;
+                if (!isOnScreen(e)) return;
                 if (Math.sqrt((e.x - this.x)**2 + (e.y - this.y)**2) < r) { 
                     e.takeDamage(this.damage); 
                     this.hitList.push(e);
@@ -1340,8 +1291,11 @@ class SkillEffect {
                     let nearest = null;
                     let minDist = this.chainRange;
                     
-                    game.entities.forEach(e => {
-                        if (!(e instanceof Enemy) || e.dead || hitEnemies.includes(e)) return;
+                    for (let j = 0; j < game.entities.length; j++) {
+                        const e = game.entities[j];
+                        if (!(e instanceof Enemy) || e.dead || hitEnemies.includes(e)) continue;
+                        if (!isOnScreen(e)) continue;
+                        
                         const ex = e.x + e.w / 2;
                         const ey = e.y + e.h / 2;
                         const dist = Math.sqrt((ex - lastX) ** 2 + (ey - lastY) ** 2);
@@ -1349,7 +1303,7 @@ class SkillEffect {
                             minDist = dist;
                             nearest = e;
                         }
-                    });
+                    }
                     
                     if (nearest) {
                         const ex = nearest.x + nearest.w / 2;
@@ -1366,7 +1320,7 @@ class SkillEffect {
                         const dmgMult = 1 - i * 0.1;
                         nearest.takeDamage(this.damage * dmgMult);
                         
-                        for (let j = 0; j < 4; j++) {
+                        for (let k = 0; k < 4; k++) {
                             const spark = new Particle(ex, ey, '#aaf');
                             spark.life = 0.3;
                             game.particles.push(spark);
@@ -1378,11 +1332,16 @@ class SkillEffect {
                         break;
                     }
                 }
+                
+                if (this.chainTargets.length === 0) {
+                    game.damageNumbers.push(new DamageNumber(this.x, this.y - 30, 'NO TARGET', false));
+                }
             }
         } else if (this.type === 'SHOCKWAVE') {
             const r = this.maxRadius * p;
             game.entities.forEach(e => {
                 if (e.dead || this.hitList.includes(e)) return;
+                if (!isOnScreen(e)) return;
                 const dx = e.x + e.w/2 - this.x, dy = e.y + e.h/2 - this.y;
                 const dist = Math.sqrt(dx*dx + dy*dy);
                 let diff = Math.atan2(dy, dx) - this.angle;
@@ -1395,7 +1354,8 @@ class SkillEffect {
     
     draw(ctx) {
         const p = this.life / this.maxLife;
-        const a = 1 - p;
+        const a = Math.max(0, 1 - p);
+        
         ctx.save();
         
         if (this.type === 'NOVA') {
@@ -1408,79 +1368,111 @@ class SkillEffect {
             ctx.shadowColor = '#0ff'; 
             ctx.stroke();
         } else if (this.type === 'CHAINLIGHTNING') {
-            ctx.globalAlpha = Math.max(0.3, a);
-            
-            this.chainTargets.forEach((chain) => {
-                const points = [];
-                const dx = chain.endX - chain.startX;
-                const dy = chain.endY - chain.startY;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                const segments = Math.max(3, Math.floor(dist / 35));
+            if (this.chainTargets.length > 0) {
+                const pulseAlpha = 0.5 + Math.sin(this.life * 30) * 0.3;
+                ctx.globalAlpha = Math.max(0.3, a) * pulseAlpha;
                 
-                points.push({x: chain.startX, y: chain.startY});
-                
-                for (let i = 1; i < segments; i++) {
-                    const t = i / segments;
-                    let px = chain.startX + dx * t;
-                    let py = chain.startY + dy * t;
+                for (let c = 0; c < this.chainTargets.length; c++) {
+                    const chain = this.chainTargets[c];
+                    const dx = chain.endX - chain.startX;
+                    const dy = chain.endY - chain.startY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
                     
-                    const perpX = -dy / dist;
-                    const perpY = dx / dist;
-                    const jitter = (Math.random() - 0.5) * 30;
-                    px += perpX * jitter;
-                    py += perpY * jitter;
+                    if (dist < 1) continue;
                     
-                    points.push({x: px, y: py});
+                    const segments = Math.max(4, Math.floor(dist / 30));
+                    const points = [{x: chain.startX, y: chain.startY}];
+                    
+                    for (let i = 1; i < segments; i++) {
+                        const t = i / segments;
+                        let px = chain.startX + dx * t;
+                        let py = chain.startY + dy * t;
+                        
+                        const perpX = -dy / dist;
+                        const perpY = dx / dist;
+                        const jitter = (Math.random() - 0.5) * 35;
+                        px += perpX * jitter;
+                        py += perpY * jitter;
+                        
+                        points.push({x: px, y: py});
+                    }
+                    points.push({x: chain.endX, y: chain.endY});
+                    
+                    ctx.strokeStyle = '#4488ff';
+                    ctx.lineWidth = 6;
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = '#aaf';
+                    ctx.beginPath();
+                    ctx.moveTo(points[0].x, points[0].y);
+                    for (let i = 1; i < points.length; i++) {
+                        ctx.lineTo(points[i].x, points[i].y);
+                    }
+                    ctx.stroke();
+                    
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = '#fff';
+                    ctx.beginPath();
+                    ctx.moveTo(points[0].x, points[0].y);
+                    for (let i = 1; i < points.length; i++) {
+                        ctx.lineTo(points[i].x, points[i].y);
+                    }
+                    ctx.stroke();
+                    
+                    ctx.fillStyle = '#fff';
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = '#aaf';
+                    ctx.beginPath();
+                    ctx.arc(chain.endX, chain.endY, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    if (c === 0) {
+                        ctx.beginPath();
+                        ctx.arc(chain.startX, chain.startY, 6, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
                 }
-                points.push({x: chain.endX, y: chain.endY});
-                
-                // Thin glow
-                ctx.strokeStyle = '#88f';
-                ctx.lineWidth = 4;
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = '#aaf';
-                ctx.beginPath();
-                ctx.moveTo(points[0].x, points[0].y);
-                for (let i = 1; i < points.length; i++) {
-                    ctx.lineTo(points[i].x, points[i].y);
+            } else {
+                ctx.globalAlpha = a;
+                const sparkCount = 8;
+                for (let i = 0; i < sparkCount; i++) {
+                    const angle = (i / sparkCount) * Math.PI * 2;
+                    const radius = 30 * p;
+                    const sx = this.x + Math.cos(angle) * radius;
+                    const sy = this.y + Math.sin(angle) * radius;
+                    
+                    ctx.fillStyle = '#88f';
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = '#aaf';
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, 3, 0, Math.PI * 2);
+                    ctx.fill();
                 }
-                ctx.stroke();
-                
-                // Thin bright core
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 1.5;
-                ctx.shadowBlur = 5;
-                ctx.shadowColor = '#fff';
-                ctx.beginPath();
-                ctx.moveTo(points[0].x, points[0].y);
-                for (let i = 1; i < points.length; i++) {
-                    ctx.lineTo(points[i].x, points[i].y);
-                }
-                ctx.stroke();
-                
-                // Small impact circle
-                ctx.fillStyle = '#fff';
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = '#aaf';
-                ctx.beginPath();
-                ctx.arc(chain.endX, chain.endY, 6, 0, Math.PI * 2);
-                ctx.fill();
-            });
-            
+            }
             ctx.shadowBlur = 0;
         } else if (this.type === 'SHOCKWAVE') {
             ctx.globalAlpha = a;
-            ctx.translate(this.x, this.y); ctx.rotate(this.angle);
+            ctx.translate(this.x, this.y); 
+            ctx.rotate(this.angle);
             for (let i = 0; i < 12; i++) {
                 const ang = -0.5 + i / 11;
                 ctx.fillStyle = '#fff';
-                ctx.beginPath(); ctx.arc(Math.cos(ang) * this.maxRadius * p, Math.sin(ang) * this.maxRadius * p, 6, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); 
+                ctx.arc(Math.cos(ang) * this.maxRadius * p, Math.sin(ang) * this.maxRadius * p, 6, 0, Math.PI * 2); 
+                ctx.fill();
             }
         } else if (this.type === 'HEAL') {
             ctx.globalAlpha = a;
-            ctx.beginPath(); ctx.arc(this.x, this.y, 60 * p, 0, Math.PI * 2);
-            ctx.strokeStyle = '#0f0'; ctx.lineWidth = 5; ctx.shadowBlur = 20; ctx.shadowColor = '#0f0'; ctx.stroke();
+            ctx.beginPath(); 
+            ctx.arc(this.x, this.y, 60 * p, 0, Math.PI * 2);
+            ctx.strokeStyle = '#0f0'; 
+            ctx.lineWidth = 5; 
+            ctx.shadowBlur = 20; 
+            ctx.shadowColor = '#0f0'; 
+            ctx.stroke();
         }
+        
         ctx.restore();
     }
 }
@@ -1502,17 +1494,14 @@ class Loot {
             const dist = Math.sqrt(dx * dx + dy * dy);
             
             if (dist < game.lootMagnet) {
-                // Magnetic effect: stronger as it gets closer
-                // Using exponential curve for acceleration effect
-                const t = 1 - (dist / game.lootMagnet); // 0 at edge, 1 at center
-                const magnetStrength = 100 + Math.pow(t, 2) * 1500; // Exponential increase
+                const t = 1 - (dist / game.lootMagnet);
+                const magnetStrength = 100 + Math.pow(t, 2) * 1500;
                 
                 if (dist > 1) {
                     this.vx += (dx / dist) * magnetStrength * dt;
                     this.vy += (dy / dist) * magnetStrength * dt;
                 }
                 
-                // Speed cap increases as it gets closer
                 const maxSpeed = 200 + t * 800;
                 const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
                 if (currentSpeed > maxSpeed) {
@@ -1779,7 +1768,6 @@ function spawnEnemies(dt) {
     if (game.state !== 'COMBAT' || game.paused) return;
     
     const isBossWave = game.wave % 5 === 0;
-    // Gradual enemy count increase - more enemies in late game
     const baseCount = game.wave <= 3 ? 8 + game.wave * 3 :
                       game.wave <= 7 ? 17 + (game.wave - 3) * 5 :
                       game.wave <= 10 ? 37 + (game.wave - 7) * 8 :
@@ -1794,7 +1782,6 @@ function spawnEnemies(dt) {
     if (game.enemiesSpawned >= limit) return;
 
     game.spawnTimer -= dt;
-    // Spawn rate scales with wave - faster in late game
     const spawnRate = game.wave <= 3 ? Math.max(0.4, 5.0 / limit) :
                       game.wave <= 7 ? Math.max(0.2, 4.0 / limit) :
                       game.wave <= 10 ? Math.max(0.1, 3.0 / limit) :
@@ -1807,12 +1794,10 @@ function spawnEnemies(dt) {
         if (isBossWave) type = 'boss';
         else {
             const r = Math.random();
-            // More dangerous enemies in late game
             if (game.wave >= 2 && r > 0.75) type = 'wasp';
             if (game.wave >= 4 && r > 0.85) type = 'sniper';
             if (game.wave >= 5 && r > 0.9) type = 'bomber';
             if (game.wave >= 7 && r > 0.95) type = 'beast';
-            // Wave 10+ has higher chance of dangerous enemies
             if (game.wave >= 10) {
                 if (r > 0.6) type = 'wasp';
                 if (r > 0.75) type = 'sniper';
@@ -1832,7 +1817,6 @@ function spawnEnemies(dt) {
         const leader = game.squad[0];
         if (!leader) return;
         
-        // Spawn from multiple directions
         const angle = Math.random() * Math.PI * 2;
         const dist = Math.max(WIDTH, HEIGHT) * 0.4;
         const sx = leader.x + Math.cos(angle) * dist;
@@ -1865,12 +1849,10 @@ function checkLootCollision() {
                 game.damageNumbers.push(new DamageNumber(leader.x + leader.w/2, leader.y, 'UPGRADE!', true));
             } else if (l.type === 'squad') {
                 const skills = ['NOVA', 'SHOCKWAVE', 'CHAINLIGHTNING', 'HEAL'];
-                // Find skills not yet in squad
                 const usedSkills = game.squad.map(s => s.skillType).filter(s => s);
                 const availableSkills = skills.filter(s => !usedSkills.includes(s));
                 
                 if (availableSkills.length > 0) {
-                    // Add new squad member with unused skill
                     const skill = availableSkills[Math.floor(Math.random() * availableSkills.length)];
                     const last = game.squad[game.squad.length - 1];
                     const nm = new Player(last.x, last.y, false, last);
@@ -1886,11 +1868,10 @@ function checkLootCollision() {
                     game.squad.push(nm);
                     game.damageNumbers.push(new DamageNumber(leader.x + leader.w/2, leader.y, '+' + skill, true));
                 } else {
-                    // All 4 skills used - level up random skill
                     const randomMember = game.squad.filter(s => s.skillType)[Math.floor(Math.random() * game.squad.filter(s => s.skillType).length)];
                     if (randomMember) {
                         randomMember.skillLevel++;
-                        randomMember.skillCooldown *= 0.85; // Faster cooldown
+                        randomMember.skillCooldown *= 0.85;
                         game.damageNumbers.push(new DamageNumber(leader.x + leader.w/2, leader.y, randomMember.skillType + ' LVL ' + randomMember.skillLevel + '!', true));
                     }
                 }
@@ -1916,9 +1897,8 @@ function checkCollisions() {
     game.projectiles.forEach(p => {
         if (!p.isPlayer || p.remove) return;
         game.entities.forEach(e => {
-            if (!(e instanceof Enemy) || e.dead || p.hitList.includes(e)) return;
-            if (e.x < game.camera.x - 100 || e.x > game.camera.x + WIDTH + 100 ||
-                e.y < game.camera.y - 100 || e.y > game.camera.y + HEIGHT + 100) return;
+            if (typeof e.type === 'undefined' || e.dead || p.hitList.includes(e)) return;
+            if (!isOnScreen(e)) return;
             if (p.x > e.x && p.x < e.x + e.w && p.y > e.y && p.y < e.y + e.h) {
                 e.takeDamage(p.damage, p.isCrit);
                 p.hitList.push(e);
@@ -1933,7 +1913,6 @@ function checkCollisions() {
         if (p.isPlayer || p.remove) return;
         game.squad.forEach(s => {
             if (s.dead) return;
-            // Boss projectiles only hit the leader
             if (p.isBossProjectile && !s.isLeader) return;
             
             if (p.x > s.x && p.x < s.x + s.w && p.y > s.y && p.y < s.y + s.h) {
@@ -2210,7 +2189,6 @@ function loop(ts) {
         game.skillEffects.forEach(s => s.update(dt));
         game.skillEffects = game.skillEffects.filter(s => !s.remove);
         
-        // Update explosion flash
         if (game.explosionFlash > 0) game.explosionFlash -= dt;
 
         game.particles.forEach(p => p.update(dt));
@@ -2282,7 +2260,6 @@ function loop(ts) {
 
     drawPostProcessing();
     
-    // Explosion flash overlay
     if (game.explosionFlash > 0) {
         ctx.fillStyle = `rgba(255, 200, 100, ${game.explosionFlash * 0.5})`;
         ctx.fillRect(0, 0, WIDTH, HEIGHT);

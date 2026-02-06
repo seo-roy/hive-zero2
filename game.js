@@ -13,7 +13,10 @@ let WIDTH, HEIGHT;
 
 const ASSETS = {
     hero: new Image(), grunt: new Image(), wasp: new Image(),
-    beast: new Image(), item_hp: new Image(), item_gun: new Image()
+    beast: new Image(), item_hp: new Image(), item_gun: new Image(),
+    healer: new Image(), worm: new Image(), monsterbig: new Image(),
+    electric: new Image(), lighting: new Image(), invincibility: new Image(),
+    shotgun: new Image()
 };
 ASSETS.hero.src = 'hero.png';
 ASSETS.grunt.src = 'grunt.png';
@@ -21,6 +24,13 @@ ASSETS.wasp.src = 'wasp.png';
 ASSETS.beast.src = 'beast.png';
 ASSETS.item_hp.src = 'item_hp.png';
 ASSETS.item_gun.src = 'item_gun.png';
+ASSETS.healer.src = 'healer.png';
+ASSETS.worm.src = 'worm.png';
+ASSETS.monsterbig.src = 'monsterbig.png';
+ASSETS.electric.src = 'electric.png';
+ASSETS.lighting.src = 'lighting.png';
+ASSETS.invincibility.src = 'Invincibility.png';
+ASSETS.shotgun.src = 'shotgun.png';
 
 let persistent = {
     coins: 0, highScore: 0, highWave: 0, totalKills: 0, gamesPlayed: 0,
@@ -41,7 +51,7 @@ function savePersistent() {
 const WEAPONS = {
     rifle: { name: 'RIFLE', fireRate: 0.15, damage: 10, ammo: 30, spread: 0.05, projectiles: 1, speed: 1500, size: 4, color: '#0ff' },
     shotgun: { name: 'SHOTGUN', fireRate: 0.6, damage: 8, ammo: 8, spread: 0.3, projectiles: 6, speed: 1200, size: 5, color: '#ff0' },
-    laser: { name: 'LASER', fireRate: 0.05, damage: 3, ammo: 100, spread: 0.02, projectiles: 1, speed: 2500, size: 2, color: '#f0f' },
+    laser: { name: 'LASER', fireRate: 0.12, damage: 2, ammo: 100, spread: 0.02, projectiles: 1, speed: 1800, size: 2, color: '#f0f' },
     rocket: { name: 'ROCKET', fireRate: 1.0, damage: 120, ammo: 6, spread: 0, projectiles: 1, speed: 700, size: 14, color: '#f80', explosive: true, explosionRadius: 180 }
 };
 
@@ -50,7 +60,8 @@ const UPGRADES = [
     { id: 'damage', name: 'FIREPOWER', desc: '+25% Damage', icon: 'gun', apply: () => { game.squad.forEach(s => s.bulletDamage *= 1.25); }},
     { id: 'fire_rate', name: 'RAPIDFIRE', desc: '+20% Fire Rate', icon: 'gun', apply: () => { game.squad.forEach(s => s.fireRate *= 0.8); }},
     { id: 'ammo', name: 'DEEP POCKETS', desc: '+50% Ammo', icon: 'gun', apply: () => { game.squad.forEach(s => { s.maxAmmo = Math.floor(s.maxAmmo * 1.5); s.ammo = s.maxAmmo; }); }},
-    { id: 'speed', name: 'SWIFT', desc: '+15% Speed', icon: 'hero', apply: () => { game.squad.forEach(s => s.speed *= 1.15); }},
+    { id: 'speed', name: 'SWIFT', desc: '+15% Speed', icon: 'hero', apply: () => { game.squad.forEach(s => { s.speed *= 1.15; if (s.baseSpeed) s.speed = Math.min(s.speed, s.baseSpeed * 2); }); }},
+    { id: 'movement_speed', name: 'AGILITY', desc: '+25% Movement Speed', icon: 'hero', apply: () => { game.squad.forEach(s => { s.speed *= 1.25; if (s.baseSpeed) s.speed = Math.min(s.speed, s.baseSpeed * 2); }); }},
     { id: 'regen', name: 'REGENERATION', desc: 'Slow HP Regen', icon: 'hp', apply: () => { game.squad.forEach(s => s.hasRegen = true); }},
     { id: 'piercing', name: 'PIERCING', desc: 'Bullets Pierce', icon: 'gun', apply: () => { game.squad.forEach(s => s.piercing = (s.piercing || 0) + 1); }},
     { id: 'shotgun', name: 'SHOTGUN', desc: 'Spread Weapon', icon: 'gun', apply: () => { game.squad.forEach(s => s.setWeapon('shotgun')); }},
@@ -100,6 +111,29 @@ const Input = {
             }
             if (e.code === 'KeyM') game.showMinimap = !game.showMinimap;
             if (e.code === 'Escape' && game.active) game.paused = !game.paused;
+            // 디버그: H키로 힐러 추가, T키로 테스트 몬스터 스폰
+            if (e.code === 'KeyH' && game.active && !game.paused) {
+                const leader = game.squad[0];
+                if (leader) {
+                    const healer = new Player(leader.x + 50, leader.y, false, leader);
+                    healer.skillType = 'HEAL';
+                    healer.bulletDamage = leader.bulletDamage;
+                    healer.maxHp = leader.maxHp;
+                    healer.hp = healer.maxHp;
+                    game.squad.push(healer);
+                }
+            }
+            if (e.code === 'KeyT' && game.active && !game.paused) {
+                const leader = game.squad[0];
+                if (leader) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = 200;
+                    const types = ['worm', 'titan', 'electric'];
+                    const type = types[Math.floor(Math.random() * types.length)];
+                    const e = new Enemy(leader.x + Math.cos(angle) * dist, leader.y + Math.sin(angle) * dist, type);
+                    game.entities.push(e);
+                }
+            }
         });
         window.addEventListener('keyup', e => {
             this.keys[e.code] = false;
@@ -266,7 +300,9 @@ class Player extends Entity {
         super(x, y, 60 * scale, 90 * scale);
         this.isLeader = isLeader;
         this.followTarget = followTarget;
-        this.speed = 200 * (1 + persistent.upgrades.speed * 0.03);
+        const baseSpeed = 200;
+        this.speed = baseSpeed * (1 + persistent.upgrades.speed * 0.03);
+        this.baseSpeed = baseSpeed; // 기본 속도 저장 (최대 2배 제한용)
         this.scale = scale;
         this.weapon = 'rifle';
         this.fireRate = WEAPONS.rifle.fireRate;
@@ -293,6 +329,19 @@ class Player extends Entity {
         this.piercing = 0;
         this.critChance = 0.05;
         this.invulnerable = 0;
+        this.invulnerableTimer = 0; // 무적물약 타이머
+        
+        // 부드러운 움직임을 위한 변수
+        this.targetVx = 0;
+        this.targetVy = 0;
+        
+        // 새로운 CD 게이지 시스템 (Rage 게이지)
+        this.rageGauge = 0; // 0에서 시작
+        this.maxRageGauge = 100;
+        this.rageMode = false; // 강력한 공격 모드
+        this.rageModeTimer = 0; // 강력한 공격 모드 지속 시간
+        this.lastDamageTime = 0; // 마지막으로 데미지를 받은 시간
+        this.rageDamageMultiplier = 2.5; // 강력한 공격 모드 데미지 배수
     }
 
     setWeapon(weaponId) {
@@ -349,8 +398,8 @@ class Player extends Entity {
                 const moveDir = Input.getMoveDirection();
                 
                 if (moveDir.active && (Math.abs(moveDir.x) > 0.1 || Math.abs(moveDir.y) > 0.1)) {
-                    this.vx = moveDir.x * this.speed;
-                    this.vy = moveDir.y * this.speed;
+                    this.targetVx = moveDir.x * this.speed;
+                    this.targetVy = moveDir.y * this.speed;
                     if (Math.abs(moveDir.x) > 0.1) this.facingRight = moveDir.x > 0;
                 } else if (!isMobile) {
                     const targetX = Input.mouse.x + game.camera.x;
@@ -358,41 +407,76 @@ class Player extends Entity {
                     const dx = targetX - (this.x + this.w / 2);
                     const dy = targetY - (this.y + this.h / 2);
                     const dist = Math.sqrt(dx * dx + dy * dy);
-                    const isMouseMoving = (performance.now() - Input.lastMove) < 100;
-                    if (dist > 10 && isMouseMoving) {
-                        this.vx = (dx / dist) * this.speed;
-                        this.vy = (dy / dist) * this.speed;
-                        this.facingRight = (dx > 0);
-                    } else { this.vx = 0; this.vy = 0; }
-                } else { this.vx = 0; this.vy = 0; }
-            } else {
-                if (this.followTarget && !this.followTarget.dead) {
-                    const dx = this.followTarget.x - this.x;
-                    const dy = this.followTarget.y - this.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist > 50) {
-                        this.vx = (dx / dist) * this.speed * 1.2;
-                        this.vy = (dy / dist) * this.speed * 1.2;
+                    const isMouseMoving = (performance.now() - Input.lastMove) < 500; // 감지 시간 증가
+                    if (dist > 5 && isMouseMoving) { // 거리 임계값 감소
+                        this.targetVx = (dx / dist) * this.speed;
+                        this.targetVy = (dy / dist) * this.speed;
                         this.facingRight = (dx > 0);
                     } else { 
-                        this.vx = 0; 
-                        this.vy = 0; 
+                        // 멈출 때도 부드럽게
+                        this.targetVx *= 0.9;
+                        this.targetVy *= 0.9;
                     }
+                } else { this.targetVx = 0; this.targetVy = 0; }
+                
+                // 즉각적이고 부드러운 움직임 (lerpFactor를 매우 높게)
+                const lerpFactor = 25.0; // 즉각적인 반응
+                this.vx += (this.targetVx - this.vx) * Math.min(1, lerpFactor * dt);
+                this.vy += (this.targetVy - this.vy) * Math.min(1, lerpFactor * dt);
+            } else {
+                // 팔로워 캐릭터: 체인 형태로 바로 앞 멤버만 따라감 (겹침 방지)
+                let target = null;
+                const myIdx = game.squad.indexOf(this);
+                const frontMember = myIdx > 0 ? game.squad[myIdx - 1] : null;
+                
+                if (frontMember && !frontMember.dead) {
+                    target = frontMember;
+                    this.followTarget = frontMember;
+                } else if (this.followTarget && !this.followTarget.dead) {
+                    target = this.followTarget;
                 } else {
+                    // 앞 멤버가 없으면 리더를 따라감
                     const leader = game.squad.find(p => p.isLeader && !p.dead);
-                    if (leader && leader !== this) {
-                        const dx = leader.x - this.x;
-                        const dy = leader.y - this.y;
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-                        if (dist > 50) {
-                            this.vx = (dx / dist) * this.speed * 1.2;
-                            this.vy = (dy / dist) * this.speed * 1.2;
-                            this.facingRight = (dx > 0);
-                        } else {
-                            this.vx = 0;
-                            this.vy = 0;
-                        }
+                    if (leader) {
+                        target = leader;
+                        this.followTarget = leader;
                     }
+                }
+                
+                if (target) {
+                    const dx = target.x - this.x;
+                    const dy = target.y - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    // 거리 임계값을 줄여서 더 가까이서도 따라가도록
+                    const followDistance = 50;
+                    if (dist > followDistance) {
+                        // 타겟을 따라가기
+                        this.targetVx = (dx / dist) * this.speed * 1.2;
+                        this.targetVy = (dy / dist) * this.speed * 1.2;
+                        this.facingRight = (dx > 0);
+                    } else if (dist > 25) {
+                        // 가까이 있지만 약간 멀면 천천히 따라가기
+                        this.targetVx = (dx / dist) * this.speed * 0.6;
+                        this.targetVy = (dy / dist) * this.speed * 0.6;
+                        this.facingRight = (dx > 0);
+                    } else {
+                        // 매우 가까우면 멈춤
+                        this.targetVx = 0;
+                        this.targetVy = 0;
+                    }
+                    
+                    // 즉각적이고 부드러운 움직임
+                    const lerpFactor = 20.0;
+                    this.vx += (this.targetVx - this.vx) * Math.min(1, lerpFactor * dt);
+                    this.vy += (this.targetVy - this.vy) * Math.min(1, lerpFactor * dt);
+                } else {
+                    // 타겟이 없으면 멈춤 (하지만 다음 프레임에서 다시 찾을 것)
+                    this.targetVx = 0;
+                    this.targetVy = 0;
+                    const lerpFactor = 20.0;
+                    this.vx += (this.targetVx - this.vx) * Math.min(1, lerpFactor * dt);
+                    this.vy += (this.targetVy - this.vy) * Math.min(1, lerpFactor * dt);
                 }
             }
         }
@@ -403,6 +487,49 @@ class Player extends Entity {
             this.hp = Math.min(this.maxHp, this.hp + 3 * dt);
             if (this.isLeader) hpBar.style.width = (this.hp / this.maxHp * 100) + '%';
         }
+        
+        // Rage 게이지 시스템 (리더만)
+        if (this.isLeader) {
+            const timeSinceLastDamage = game.time - this.lastDamageTime;
+            
+            // Rage 모드 중
+            if (this.rageMode) {
+                this.rageModeTimer -= dt;
+                // 게이지가 줄어듦
+                this.rageGauge = Math.max(0, this.rageGauge - (this.maxRageGauge / 10.0) * dt);
+                
+                if (this.rageModeTimer <= 0) {
+                    this.rageMode = false;
+                    this.rageGauge = 0; // 게이지 초기화
+                }
+            } else {
+                // 공격받지 않으면 게이지 증가 (3초 후부터 증가 시작)
+                if (timeSinceLastDamage > 3.0) {
+                    const chargeRate = 15.0; // 초당 증가량
+                    this.rageGauge = Math.min(this.maxRageGauge, this.rageGauge + chargeRate * dt);
+                    
+                    // 게이지가 풀로 차면 Rage 모드 활성화
+                    if (this.rageGauge >= this.maxRageGauge) {
+                        this.rageMode = true;
+                        this.rageModeTimer = 10.0; // 10초간 지속
+                        this.rageGauge = this.maxRageGauge; // 풀 상태 유지
+                        game.shake = 15;
+                        // 번쩍이는 효과
+                        for (let i = 0; i < 30; i++) {
+                            const p = new Particle(this.x + this.w/2, this.y + this.h/2, '#ff0');
+                            p.vx = (Math.random() - 0.5) * 600;
+                            p.vy = (Math.random() - 0.5) * 600;
+                            p.life = 1.0;
+                            game.particles.push(p);
+                        }
+                        game.damageNumbers.push(new DamageNumber(this.x + this.w/2, this.y, 'RAGE MODE!', true));
+                    }
+                } else {
+                    // 데미지를 받으면 게이지 감소
+                    this.rageGauge = Math.max(0, this.rageGauge - 30 * dt);
+                }
+            }
+        }
 
         this.footprintTimer -= dt;
         if (this.footprintTimer <= 0 && (Math.abs(this.vx) > 10 || Math.abs(this.vy) > 10)) {
@@ -412,8 +539,10 @@ class Player extends Entity {
 
         if (this.ammo <= 0 && !this.reloading) this.reload();
 
-        const hasTarget = game.entities.some(e => e instanceof Enemy && !e.dead);
-        const shouldFire = isMobile ? hasTarget : (Input.mouse.down && hasTarget);
+        // 화면에 보이는 적만 체크
+        const hasTarget = game.entities.some(e => e instanceof Enemy && !e.dead && isOnScreen(e));
+        // 자동 공격 (마우스 클릭 없이)
+        const shouldFire = hasTarget;
         
         if (shouldFire && !this.reloading && this.ammo > 0 && !game.showUpgradeUI && !game.paused) {
             if (game.time - this.lastShot > this.fireRate) this.shoot();
@@ -426,7 +555,9 @@ class Player extends Entity {
 
         if (this.skillType) {
             this.skillTimer -= dt;
-            if (this.skillTimer <= 0) {
+            // 화면에 보이는 적이 있을 때만 스킬 사용
+            const hasVisibleEnemy = game.entities.some(e => e instanceof Enemy && !e.dead && isOnScreen(e));
+            if (this.skillTimer <= 0 && (hasVisibleEnemy || this.skillType === 'HEAL')) {
                 this.triggerSkill();
                 this.skillTimer = this.skillCooldown;
             }
@@ -446,9 +577,17 @@ class Player extends Entity {
             const angle = target ? Math.atan2(target.y + target.h/2 - cy, target.x + target.w/2 - cx) : (this.facingRight ? 0 : Math.PI);
             game.skillEffects.push(new SkillEffect(cx, cy, 'SHOCKWAVE', this.bulletDamage * 0.4, angle));
         } else if (this.skillType === 'CHAINLIGHTNING') {
-            const chainEffect = new SkillEffect(cx, cy, 'CHAINLIGHTNING', this.bulletDamage * 0.6);
+            // 스킬 레벨에 따라 몬스터 수 증가 (5~10개)
+            const baseChains = 5;
+            // 레벨 1: 5개, 레벨 2: 6개, ... 레벨 6: 10개 (최대)
+            const maxChains = Math.min(10, baseChains + (this.skillLevel - 1));
+            const chainDamage = this.bulletDamage * 0.6;
+            // 10개 이후(레벨 6 이상) 레벨업 시 데미지 3%씩 증가
+            const damageMultiplier = this.skillLevel > 6 ? 1 + (this.skillLevel - 6) * 0.03 : 1;
+            
+            const chainEffect = new SkillEffect(cx, cy, 'CHAINLIGHTNING', chainDamage * damageMultiplier);
             chainEffect.owner = this;
-            chainEffect.maxChains = 5;
+            chainEffect.maxChains = maxChains;
             chainEffect.chainRange = 700;
             game.skillEffects.push(chainEffect);
         } else if (this.skillType === 'HEAL') {
@@ -462,6 +601,8 @@ class Player extends Entity {
         let nearest = null, minDist = Infinity;
         game.entities.forEach(e => {
             if (e instanceof Enemy && !e.dead) {
+                // 화면에 보이는 적만 선택
+                if (!isOnScreen(e)) return;
                 const dist = (e.x - this.x) ** 2 + (e.y - this.y) ** 2;
                 if (dist < minDist) { minDist = dist; nearest = e; }
             }
@@ -473,15 +614,29 @@ class Player extends Entity {
         const w = WEAPONS[this.weapon];
         const cx = this.x + this.w / 2, cy = this.y + this.h / 3;
         let target = this.getNearestEnemy();
-        let baseAngle = target ? Math.atan2(target.y + target.h/2 - cy, target.x + target.w/2 - cx) :
-            (this.isLeader ? Math.atan2(Input.mouse.y + game.camera.y - cy, Input.mouse.x + game.camera.x - cx) : (this.facingRight ? 0 : Math.PI));
+        // 화면에 보이지 않으면 공격하지 않음
+        if (!target || !isOnScreen(target)) return;
+        
+        let baseAngle = Math.atan2(target.y + target.h/2 - cy, target.x + target.w/2 - cx);
 
         const isCrit = Math.random() < this.critChance;
-        const damage = this.bulletDamage * (isCrit ? 2 : 1);
+        let damage = this.bulletDamage * (isCrit ? 2 : 1);
+        
+        // Rage 모드일 때 데미지 배수 적용
+        if (this.isLeader && this.rageMode) {
+            damage *= this.rageDamageMultiplier;
+        }
 
         for (let i = 0; i < w.projectiles; i++) {
             const spread = (Math.random() - 0.5) * w.spread * 2;
-            const p = new Projectile(cx, cy, baseAngle + spread, w.speed, damage * 0.7, true, w.size, w.color);
+            let bulletColor = w.color;
+            let bulletSize = w.size;
+            // Rage 모드일 때 총알 색상과 크기 변경
+            if (this.isLeader && this.rageMode) {
+                bulletColor = '#ff0'; // 노란색
+                bulletSize = w.size * 1.3; // 크기 증가
+            }
+            const p = new Projectile(cx, cy, baseAngle + spread, w.speed, damage * 0.7, true, bulletSize, bulletColor);
             p.piercing = this.piercing;
             p.isCrit = isCrit;
             if (w.explosive) p.explosive = true;
@@ -509,6 +664,12 @@ class Player extends Entity {
         this.hp -= amount;
         this.invulnerable = 0.1;
         game.combo = 0;
+        
+        // Rage 게이지 시스템: 데미지를 받으면 시간 기록
+        if (this.isLeader) {
+            this.lastDamageTime = game.time;
+        }
+        
         if (this.hp <= 0) { this.hp = 0; this.dead = true; if (this.isLeader) endGame(); }
         if (this.isLeader) hpBar.style.width = (this.hp / this.maxHp * 100) + '%';
     }
@@ -531,13 +692,34 @@ class Player extends Entity {
         if (!this.facingRight) ctx.scale(-1, 1);
 
         if (this.isLeader) {
-            ctx.shadowBlur = 30 + Math.sin(game.time * 6) * 15;
-            ctx.shadowColor = '#0ff';
+            // Rage 모드일 때 번쩍이는 효과
+            if (this.rageMode) {
+                const flash = Math.sin(game.time * 20) * 0.5 + 0.5;
+                ctx.shadowBlur = 50 + flash * 30;
+                ctx.shadowColor = `rgba(255, ${255 * flash}, 0, 1)`;
+            } else {
+                ctx.shadowBlur = 30 + Math.sin(game.time * 6) * 15;
+                ctx.shadowColor = '#0ff';
+            }
         }
 
-        if (ASSETS.hero.complete && ASSETS.hero.naturalWidth > 0) {
+        // 스킬 타입별로 다른 이미지 사용
+        let charImg = null;
+        if (this.skillType === 'HEAL' && ASSETS.healer.complete && ASSETS.healer.naturalWidth > 0) {
+            charImg = ASSETS.healer;
+        } else if (this.skillType === 'NOVA' && ASSETS.electric.complete && ASSETS.electric.naturalWidth > 0) {
+            charImg = ASSETS.electric;
+        } else if (this.skillType === 'CHAINLIGHTNING' && ASSETS.lighting.complete && ASSETS.lighting.naturalWidth > 0) {
+            charImg = ASSETS.lighting;
+        } else if (this.skillType === 'SHOCKWAVE' && ASSETS.shotgun.complete && ASSETS.shotgun.naturalWidth > 0) {
+            charImg = ASSETS.shotgun;
+        } else if (ASSETS.hero.complete && ASSETS.hero.naturalWidth > 0) {
+            charImg = ASSETS.hero;
+        }
+        
+        if (charImg) {
             const imgW = 90 * this.scale, imgH = 100 * this.scale;
-            ctx.drawImage(ASSETS.hero, -imgW/2, -imgH/2, imgW, imgH);
+            ctx.drawImage(charImg, -imgW/2, -imgH/2, imgW, imgH);
         } else {
             ctx.fillStyle = this.isLeader ? '#0ff' : '#08f';
             ctx.fillRect(-this.w / 2, -this.h / 2, this.w, this.h);
@@ -584,6 +766,35 @@ class Enemy extends Entity {
         this.aggressionLevel = 0.5 + Math.random() * 0.5;
         this.lastPlayerPos = { x: 0, y: 0 };
         this.predictedPos = { x: 0, y: 0 };
+        
+        // Worm 패턴용 변수
+        if (type === 'worm') {
+            this.burrowed = Math.random() > 0.5; // 시작 시 땅 속에 있을 수도 있음
+            this.burrowTimer = this.burrowed ? (2.0 + Math.random() * 2.0) : (1.5 + Math.random() * 1.0);
+            this.burrowCooldown = 2.0 + Math.random() * 2.0;
+            this.surfacePos = { x: x, y: y };
+        } else {
+            this.burrowed = false;
+            this.burrowTimer = undefined;
+        }
+        
+        // Electric 패턴용 변수
+        if (type === 'electric') {
+            this.electricCharge = 0;
+            this.electricCooldown = 3.0;
+            this.electricTimer = 1.0 + Math.random() * 1.0; // 첫 공격까지 시간
+        } else {
+            this.electricTimer = undefined;
+            this.electricCharge = 0;
+        }
+        
+        // Titan 패턴용 변수
+        if (type === 'titan') {
+            this.slamTimer = 2.0 + Math.random() * 2.0; // 첫 강타까지 시간
+            this.slamCooldown = 4.0;
+        } else {
+            this.slamTimer = undefined;
+        }
 
         const waveBonus = game.wave <= 3 ? 1 + (game.wave - 1) * 0.05 : 
                           game.wave <= 7 ? 1.1 + (game.wave - 3) * 0.15 :
@@ -596,6 +807,9 @@ class Enemy extends Entity {
             beast: { hp: 400 * waveBonus, speed: 50 + game.wave * 4, score: 1000, coins: 50, w: 150, h: 130, damage: 15 + game.wave * 2.5 },
             sniper: { hp: 35 * waveBonus, speed: 60 + game.wave * 4, score: 200, coins: 15, w: 60, h: 80, damage: 12 + game.wave * 2.5 },
             bomber: { hp: 45 * waveBonus, speed: 140 + game.wave * 12, score: 250, coins: 20, w: 50, h: 50, damage: 25 + game.wave * 3.5 },
+            worm: { hp: 80 * waveBonus, speed: 120 + game.wave * 8, score: 180, coins: 12, w: 60, h: 40, damage: 8 + game.wave * 2 },
+            titan: { hp: 600 * waveBonus, speed: 30 + game.wave * 2, score: 1500, coins: 80, w: 180, h: 160, damage: 25 + game.wave * 3 },
+            electric: { hp: 60 * waveBonus, speed: 100 + game.wave * 7, score: 220, coins: 18, w: 55, h: 55, damage: 10 + game.wave * 2.2 },
             boss: { hp: 1500 + game.wave * 600, speed: 40 + game.wave * 4, score: 5000, coins: 200, w: 200, h: 180, damage: 20 + game.wave * 4 }
         };
 
@@ -678,6 +892,12 @@ class Enemy extends Entity {
             this.updateSniperAI(dt, target, dist, dirX, dirY);
         } else if (this.type === 'bomber') {
             this.updateBomberAI(dt, target, dist, dirX, dirY);
+        } else if (this.type === 'worm') {
+            this.updateWormAI(dt, target, dist, dirX, dirY);
+        } else if (this.type === 'titan') {
+            this.updateTitanAI(dt, target, dist, dirX, dirY);
+        } else if (this.type === 'electric') {
+            this.updateElectricAI(dt, target, dist, dirX, dirY);
         } else if (this.type === 'boss') {
             this.updateBossAI(dt, target, dist, dirX, dirY);
         }
@@ -870,7 +1090,7 @@ class Enemy extends Entity {
 
         this.attackTimer -= dt;
         if (this.attackTimer <= 0 && dist < 500) {
-            const bulletSpeed = 900;
+            const bulletSpeed = 450; // 2배 느리게 (900 -> 450)
             const timeToHit = dist / bulletSpeed;
             const leadX = target.x + target.vx * timeToHit;
             const leadY = target.y + target.vy * timeToHit;
@@ -902,6 +1122,184 @@ class Enemy extends Entity {
         this.vy = (pdy / pdist) * this.speed * speedMult;
         
         if (dist < 50) this.explode();
+    }
+
+    updateWormAI(dt, target, dist, dirX, dirY) {
+        // 땅 속 패턴: 땅 속에 숨었다가 나타나서 공격
+        if (this.burrowTimer === undefined) {
+            this.burrowed = Math.random() > 0.5;
+            this.burrowTimer = this.burrowed ? (2.0 + Math.random() * 2.0) : (1.5 + Math.random() * 1.0);
+        }
+        this.burrowTimer -= dt;
+        
+        if (this.burrowed) {
+            // 땅 속에 있을 때
+            if (this.burrowTimer <= 0) {
+                // 나타나기
+                this.burrowed = false;
+                // 타겟 근처로 이동
+                const angle = Math.random() * Math.PI * 2;
+                const spawnDist = 100 + Math.random() * 150;
+                this.x = target.x + Math.cos(angle) * spawnDist;
+                this.y = target.y + Math.sin(angle) * spawnDist;
+                this.burrowTimer = 1.5 + Math.random() * 1.0; // 공격 시간
+                game.particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, '#8b4513'));
+            }
+            // 땅 속에서는 이동하지 않음
+            this.vx = 0;
+            this.vy = 0;
+        } else {
+            // 지상에 있을 때
+            if (this.burrowTimer <= 0) {
+                // 다시 땅 속으로
+                this.burrowed = true;
+                this.burrowTimer = this.burrowCooldown || (2.0 + Math.random() * 2.0);
+                game.particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, '#654321'));
+            } else {
+                // 타겟을 향해 빠르게 이동
+                this.vx = dirX * this.speed * 1.5;
+                this.vy = dirY * this.speed * 1.5;
+                
+                // 근접 공격
+                if (dist < 60) {
+                    if (this.attackTimer === undefined) this.attackTimer = 0;
+                    this.attackTimer -= dt;
+                    if (this.attackTimer <= 0) {
+                        target.takeDamage(this.damage);
+                        this.attackTimer = 0.4;
+                        game.shake = 4;
+                    }
+                }
+            }
+        }
+    }
+
+    updateTitanAI(dt, target, dist, dirX, dirY) {
+        // 느리지만 강력한 대형 몬스터
+        if (this.slamTimer === undefined) this.slamTimer = 2.0;
+        this.slamTimer -= dt;
+        
+        // 느리게 타겟을 향해 이동
+        this.vx = dirX * this.speed;
+        this.vy = dirY * this.speed;
+        
+        // 지면 강타 공격
+        if (this.slamTimer <= 0 && dist < 200) {
+            this.slamTimer = this.slamCooldown || 4.0;
+            
+            // 강타 전 경고
+            game.warnings.push(new Warning(this.x + this.w/2, this.y + this.h/2, 'slam'));
+            
+            // 현재 위치 저장 (클로저 문제 방지)
+            const self = this;
+            const slamX = this.x + this.w / 2;
+            const slamY = this.y + this.h / 2;
+            const slamDamage = this.damage;
+            const targetX = target.x;
+            const targetY = target.y;
+            
+            setTimeout(() => {
+                if (!self.dead && game.active) {
+                    // 현재 거리 재계산 (타겟은 항상 리더)
+                    const currentTarget = game.squad.find(p => !p.dead);
+                    if (!currentTarget) return;
+                    const currentDist = Math.sqrt((currentTarget.x - self.x)**2 + (currentTarget.y - self.y)**2);
+                    if (currentDist < 250) {
+                        // 원형 충격파 발사
+                        for (let i = 0; i < 8; i++) {
+                            const angle = (i / 8) * Math.PI * 2;
+                            const p = new Projectile(slamX, slamY, angle, 150, slamDamage * 0.8, false, 10, '#8b4513'); // 2배 느리게
+                            p.life = 1.5;
+                            game.projectiles.push(p);
+                        }
+                        game.shake = 20;
+                        
+                        // 근처 플레이어에게 데미지
+                        game.squad.forEach(p => {
+                            if (p.dead) return;
+                            const d = Math.sqrt((p.x + p.w/2 - slamX)**2 + (p.y + p.h/2 - slamY)**2);
+                            if (d < 150) {
+                                p.takeDamage(slamDamage * (1 - d/150));
+                            }
+                        });
+                    }
+                }
+            }, 800);
+        }
+        
+        // 근접 공격
+        if (dist < 120) {
+            if (this.attackTimer === undefined) this.attackTimer = 0;
+            this.attackTimer -= dt;
+            if (this.attackTimer <= 0) {
+                target.takeDamage(this.damage);
+                this.attackTimer = 1.2;
+                game.shake = 12;
+            }
+        }
+    }
+
+    updateElectricAI(dt, target, dist, dirX, dirY) {
+        // 전기 공격 몬스터
+        if (this.electricTimer === undefined) {
+            this.electricTimer = 1.0 + Math.random() * 1.0;
+            this.electricCharge = 0;
+        }
+        this.electricTimer -= dt;
+        
+        // 타겟을 향해 이동
+        this.vx = dirX * this.speed;
+        this.vy = dirY * this.speed;
+        
+        // 전기 충전 효과 감소
+        if (this.electricCharge > 0) {
+            this.electricCharge = Math.max(0, this.electricCharge - dt * 2);
+        }
+        
+        // 전기 공격
+        if (this.electricTimer <= 0 && dist < 400) {
+            this.electricTimer = this.electricCooldown || 3.0;
+            this.electricCharge = 1.0;
+            
+            const cx = this.x + this.w / 2;
+            const cy = this.y + this.h / 2;
+            
+            // 타겟을 향한 전기 발사
+            const angle = Math.atan2(target.y + target.h/2 - cy, target.x + target.w/2 - cx);
+            
+            // 메인 전기 볼트
+            const mainBolt = new Projectile(cx, cy, angle, 400, this.damage, false, 8, '#ffff00'); // 2배 느리게
+            mainBolt.life = 2.0;
+            game.projectiles.push(mainBolt);
+            
+            // 주변 전기 스파크
+            for (let i = 0; i < 3; i++) {
+                const spread = (Math.random() - 0.5) * 0.3;
+                const spark = new Projectile(cx, cy, angle + spread, 300, this.damage * 0.5, false, 5, '#00ffff'); // 2배 느리게
+                spark.life = 1.5;
+                game.projectiles.push(spark);
+            }
+            
+            // 전기 이펙트 파티클
+            for (let i = 0; i < 10; i++) {
+                const p = new Particle(cx, cy, '#ffff00');
+                p.vx = (Math.random() - 0.5) * 300;
+                p.vy = (Math.random() - 0.5) * 300;
+                p.life = 0.3;
+                game.particles.push(p);
+            }
+        }
+        
+        // 근접 공격
+        if (dist < 70) {
+            if (this.attackTimer === undefined) this.attackTimer = 0;
+            this.attackTimer -= dt;
+            if (this.attackTimer <= 0) {
+                target.takeDamage(this.damage * 0.7);
+                this.attackTimer = 0.5;
+                game.shake = 3;
+            }
+        }
     }
 
     updateBossAI(dt, target, dist, dirX, dirY) {
@@ -963,7 +1361,7 @@ class Enemy extends Entity {
         if (pattern === 0) {
             const a = Math.atan2(target.y - cy, target.x - cx);
             for (let i = 0; i < 9; i++) {
-                const p = new Projectile(cx, cy, a - 0.6 + i * 0.15, 400, 15, false, 8, '#f00');
+                const p = new Projectile(cx, cy, a - 0.6 + i * 0.15, 200, 15, false, 8, '#f00'); // 2배 느리게
                 p.isBossProjectile = true;
                 p.life = 10;
                 game.projectiles.push(p);
@@ -972,7 +1370,7 @@ class Enemy extends Entity {
             for (let i = 0; i < 16; i++) {
                 setTimeout(() => {
                     if (!this.dead) {
-                        const p = new Projectile(cx, cy, game.time * 5 + i * Math.PI / 8, 350, 12, false, 6, '#ff0');
+                        const p = new Projectile(cx, cy, game.time * 5 + i * Math.PI / 8, 175, 12, false, 6, '#ff0'); // 2배 느리게
                         p.isBossProjectile = true;
                         p.life = 10;
                         game.projectiles.push(p);
@@ -981,7 +1379,7 @@ class Enemy extends Entity {
             }
         } else if (pattern === 2) {
             for (let i = 0; i < 4; i++) {
-                const p = new Projectile(cx, cy, Math.atan2(target.y - cy, target.x - cx) + (i - 1.5) * 0.4, 200, 18, false, 10, '#f80');
+                const p = new Projectile(cx, cy, Math.atan2(target.y - cy, target.x - cx) + (i - 1.5) * 0.4, 100, 18, false, 10, '#f80'); // 2배 느리게
                 p.homing = true;
                 p.homingStrength = 4;
                 p.isBossProjectile = true;
@@ -996,7 +1394,7 @@ class Enemy extends Entity {
             }
         } else {
             for (let i = 0; i < 20; i++) {
-                const p = new Projectile(cx, cy, i * Math.PI / 10, 250, 10, false, 5, '#f0f');
+                const p = new Projectile(cx, cy, i * Math.PI / 10, 125, 10, false, 5, '#f0f'); // 2배 느리게
                 p.isBossProjectile = true;
                 p.life = 10;
                 game.projectiles.push(p);
@@ -1005,6 +1403,11 @@ class Enemy extends Entity {
     }
 
     takeDamage(dmg, isCrit = false) {
+        // Worm이 땅 속에 있을 때는 데미지를 받지 않음
+        if (this.type === 'worm' && this.burrowed) {
+            return;
+        }
+        
         this.hp -= dmg;
         game.damageNumbers.push(new DamageNumber(this.x + this.w/2 + (Math.random() - 0.5) * 30, this.y, dmg, isCrit));
         game.particles.push(new HitSpark(this.x + this.w/2, this.y + this.h/2, isCrit ? '#ff0' : '#fff'));
@@ -1025,7 +1428,7 @@ class Enemy extends Entity {
             if (this.type === 'bomber') this.explode();
             else if (this.type === 'boss') {
                 for (let i = 0; i < 3; i++) {
-                    game.loots.push(new Loot(this.x + this.w/2 + (Math.random() - 0.5) * 150, this.y + this.h/2 + (Math.random() - 0.5) * 150, ['hp', 'gun', 'squad'][i]));
+                    game.loots.push(new Loot(this.x + this.w/2 + (Math.random() - 0.5) * 150, this.y + this.h/2 + (Math.random() - 0.5) * 150, ['hp', 'gun', 'squad', 'invincibility'][i]));
                 }
             } else if (this.lootDrop) {
                 game.loots.push(new Loot(this.x + this.w/2, this.y + this.h/2, this.lootDrop));
@@ -1052,26 +1455,53 @@ class Enemy extends Entity {
         else if (this.type === 'beast' || this.type === 'boss') img = ASSETS.beast;
         else if (this.type === 'sniper') img = ASSETS.grunt;
         else if (this.type === 'bomber') img = ASSETS.wasp;
+        else if (this.type === 'worm') img = ASSETS.worm;
+        else if (this.type === 'titan') img = ASSETS.monsterbig;
+        else if (this.type === 'electric') img = ASSETS.electric;
 
+        // Worm은 땅 속에 있을 때 반투명하게
+        if (this.type === 'worm' && this.burrowed) {
+            ctx.globalAlpha = 0.3;
+        }
+        
         if (img && img.complete && img.naturalWidth > 0) {
             if (this.type === 'sniper') ctx.filter = 'hue-rotate(180deg)';
             if (this.type === 'bomber') ctx.filter = 'hue-rotate(30deg) saturate(2)';
+            if (this.type === 'electric') ctx.filter = 'brightness(1.3) saturate(1.5)';
             
             if (this.type === 'beast') ctx.drawImage(img, -80 * this.scale, -70 * this.scale, 160 * this.scale, 140 * this.scale);
             else if (this.type === 'boss') ctx.drawImage(img, -100 * this.scale, -90 * this.scale, 200 * this.scale, 180 * this.scale);
-            else if (this.type === 'wasp' || this.type === 'bomber') ctx.drawImage(img, -30 * this.scale, -30 * this.scale, 60 * this.scale, 60 * this.scale);
+            else if (this.type === 'titan') ctx.drawImage(img, -90 * this.scale, -80 * this.scale, 180 * this.scale, 160 * this.scale);
+            else if (this.type === 'wasp' || this.type === 'bomber' || this.type === 'electric') ctx.drawImage(img, -30 * this.scale, -30 * this.scale, 60 * this.scale, 60 * this.scale);
+            else if (this.type === 'worm') ctx.drawImage(img, -35 * this.scale, -25 * this.scale, 70 * this.scale, 50 * this.scale);
             else ctx.drawImage(img, -40 * this.scale, -50 * this.scale, 80 * this.scale, 100 * this.scale);
             
             ctx.filter = 'none';
         } else {
-            const colors = { grunt: '#0f0', wasp: '#ff0', beast: '#f0f', boss: '#f0f', sniper: '#a00', bomber: '#f80' };
+            const colors = { grunt: '#0f0', wasp: '#ff0', beast: '#f0f', boss: '#f0f', sniper: '#a00', bomber: '#f80', worm: '#8b4513', titan: '#4a4a4a', electric: '#ffff00' };
             ctx.fillStyle = colors[this.type] || '#0f0';
-            if (this.type === 'bomber') {
+            if (this.type === 'bomber' || this.type === 'electric') {
                 ctx.beginPath(); ctx.arc(0, 0, this.w/2, 0, Math.PI * 2); ctx.fill();
             } else {
                 ctx.fillRect(-this.w/2, -this.h/2, this.w, this.h);
             }
         }
+        
+        // Electric 몬스터 전기 효과
+        if (this.type === 'electric' && this.electricCharge > 0) {
+            ctx.globalAlpha = this.electricCharge * 0.5;
+            ctx.strokeStyle = '#ffff00';
+            ctx.lineWidth = 3;
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#ffff00';
+            ctx.beginPath();
+            ctx.arc(0, 0, this.w/2 + 10, 0, Math.PI * 2);
+            ctx.stroke();
+            // electricCharge는 update 메서드에서 감소시키므로 여기서는 그리기만 함
+            ctx.shadowBlur = 0;
+        }
+        
+        ctx.globalAlpha = 1;
 
         ctx.shadowBlur = 0;
 
@@ -1524,8 +1954,8 @@ class Loot {
         const s = 1 + Math.sin(game.time * 10) * 0.1;
         ctx.scale(s, s);
         ctx.shadowBlur = 20;
-        ctx.shadowColor = this.type === 'hp' ? '#0f0' : (this.type === 'gun' ? '#0ff' : '#ff0');
-        let img = this.type === 'hp' ? ASSETS.item_hp : (this.type === 'gun' ? ASSETS.item_gun : ASSETS.hero);
+        ctx.shadowColor = this.type === 'hp' ? '#ff0' : (this.type === 'gun' ? '#0ff' : (this.type === 'invincibility' ? '#ff0' : '#ff0')); // HP를 노란색으로 변경 (CD 리셋)
+        let img = this.type === 'hp' ? ASSETS.item_hp : (this.type === 'gun' ? ASSETS.item_gun : (this.type === 'invincibility' ? ASSETS.invincibility : ASSETS.hero));
         const size = 40 * this.scale;
         if (img && img.complete && img.naturalWidth > 0) {
             ctx.drawImage(img, -size/2, -size/2, size, size);
@@ -1536,7 +1966,7 @@ class Loot {
         ctx.fillStyle = '#fff';
         ctx.font = `bold ${10 * this.scale}px Arial`;
         ctx.textAlign = 'center';
-        const labels = { hp: 'HEAL', gun: 'UPGRADE', squad: 'ALLY' };
+        const labels = { hp: 'CD RESET', gun: 'UPGRADE', squad: 'ALLY', invincibility: 'INVINCIBLE' };
         ctx.fillText(labels[this.type] || '', 0, 35 * this.scale);
         ctx.textAlign = 'left';
         ctx.restore();
@@ -1735,7 +2165,7 @@ function drawMinimap() {
     game.loots.forEach(l => {
         const dx = (l.x - leader.x) * scale, dy = (l.y - leader.y) * scale;
         if (Math.abs(dx) < size/2 && Math.abs(dy) < size/2) {
-            ctx.fillStyle = l.type === 'hp' ? '#0f0' : (l.type === 'gun' ? '#0ff' : '#ff0');
+            ctx.fillStyle = l.type === 'hp' ? '#ff0' : (l.type === 'gun' ? '#0ff' : (l.type === 'invincibility' ? '#ff0' : '#ff0')); // HP를 노란색으로 변경
             ctx.fillRect(centerX + dx - 2, centerY + dy - 2, 4, 4);
         }
     });
@@ -1795,14 +2225,20 @@ function spawnEnemies(dt) {
         else {
             const r = Math.random();
             if (game.wave >= 2 && r > 0.75) type = 'wasp';
-            if (game.wave >= 4 && r > 0.85) type = 'sniper';
-            if (game.wave >= 5 && r > 0.9) type = 'bomber';
-            if (game.wave >= 7 && r > 0.95) type = 'beast';
+            if (game.wave >= 2 && r > 0.75) type = 'worm';
+            if (game.wave >= 3 && r > 0.70) type = 'sniper'; // 총알 몬스터 더 많이 (0.85 -> 0.70)
+            if (game.wave >= 5 && r > 0.88) type = 'bomber';
+            if (game.wave >= 3 && r > 0.81) type = 'electric';
+            if (game.wave >= 7 && r > 0.93) type = 'beast';
+            if (game.wave >= 4 && r > 0.86) type = 'titan';
             if (game.wave >= 10) {
-                if (r > 0.6) type = 'wasp';
-                if (r > 0.75) type = 'sniper';
-                if (r > 0.85) type = 'bomber';
-                if (r > 0.92) type = 'beast';
+                if (r > 0.4) type = 'wasp';
+                if (r > 0.55) type = 'worm';
+                if (r > 0.60) type = 'sniper'; // 총알 몬스터 더 많이 (0.75 -> 0.60)
+                if (r > 0.75) type = 'bomber';
+                if (r > 0.80) type = 'electric';
+                if (r > 0.88) type = 'beast';
+                if (r > 0.92) type = 'titan';
             }
         }
 
@@ -1818,7 +2254,7 @@ function spawnEnemies(dt) {
         if (!leader) return;
         
         const angle = Math.random() * Math.PI * 2;
-        const dist = Math.max(WIDTH, HEIGHT) * 0.4;
+        const dist = Math.max(WIDTH, HEIGHT) * 0.28; // 맵 크기 축소 (0.4 -> 0.28)
         const sx = leader.x + Math.cos(angle) * dist;
         const sy = leader.y + Math.sin(angle) * dist;
 
@@ -1826,7 +2262,7 @@ function spawnEnemies(dt) {
         game.entities.push(e);
         game.enemiesSpawned++;
 
-        if (type === 'boss' || type === 'bomber' || type === 'beast') {
+        if (type === 'boss' || type === 'bomber' || type === 'beast' || type === 'titan') {
             game.warnings.push(new Warning(sx, sy, type));
         }
     }
@@ -1841,12 +2277,23 @@ function checkLootCollision() {
         if (dist < 50) {
             l.remove = true;
             if (l.type === 'hp') {
-                game.squad.forEach(s => { s.hp = Math.min(s.maxHp, s.hp + 40); });
-                if (game.squad[0]) hpBar.style.width = (game.squad[0].hp / game.squad[0].maxHp * 100) + '%';
-                game.damageNumbers.push(new DamageNumber(leader.x + leader.w/2, leader.y, '+40 HP', false));
+                // Rage 게이지를 채워주는 물약
+                if (leader && !leader.rageMode) {
+                    leader.rageGauge = Math.min(leader.maxRageGauge, leader.rageGauge + 50); // 50% 채움
+                    game.damageNumbers.push(new DamageNumber(leader.x + leader.w/2, leader.y, '+50 RAGE', true));
+                } else {
+                    game.damageNumbers.push(new DamageNumber(leader.x + leader.w/2, leader.y, 'RAGE FULL!', true));
+                }
             } else if (l.type === 'gun') {
                 game.squad.forEach(s => { s.bulletDamage += 3; s.maxAmmo += 5; s.ammo = s.maxAmmo; });
                 game.damageNumbers.push(new DamageNumber(leader.x + leader.w/2, leader.y, 'UPGRADE!', true));
+            } else if (l.type === 'invincibility') {
+                // 5초간 무적 효과
+                game.squad.forEach(s => {
+                    s.invulnerableTimer = 5.0;
+                    s.invulnerable = 0.1;
+                });
+                game.damageNumbers.push(new DamageNumber(leader.x + leader.w/2, leader.y, 'INVINCIBLE 5s!', true));
             } else if (l.type === 'squad') {
                 const skills = ['NOVA', 'SHOCKWAVE', 'CHAINLIGHTNING', 'HEAL'];
                 const usedSkills = game.squad.map(s => s.skillType).filter(s => s);
@@ -1855,7 +2302,14 @@ function checkLootCollision() {
                 if (availableSkills.length > 0) {
                     const skill = availableSkills[Math.floor(Math.random() * availableSkills.length)];
                     const last = game.squad[game.squad.length - 1];
-                    const nm = new Player(last.x, last.y, false, last);
+                    // 새 캐릭터를 마지막 멤버 뒤쪽에 스폰 (겹침 방지)
+                    const dx = last.x - leader.x;
+                    const dy = last.y - leader.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const offset = 80; // 팔로워 간격
+                    const spawnX = dist > 0.1 ? last.x + (dx / dist) * offset : last.x + offset;
+                    const spawnY = dist > 0.1 ? last.y + (dy / dist) * offset : last.y;
+                    const nm = new Player(spawnX, spawnY, false, last);
                     nm.bulletDamage = leader.bulletDamage;
                     nm.maxHp = leader.maxHp; nm.hp = nm.maxHp;
                     nm.maxAmmo = leader.maxAmmo; nm.ammo = nm.maxAmmo;
@@ -1886,7 +2340,7 @@ function nextWave() {
     waveEl.innerText = game.wave;
     game.enemiesSpawned = 0;
     game.killsThisWave = 0;
-    game.waveDrops = ['hp', 'gun', 'squad'];
+    game.waveDrops = ['hp', 'gun', 'squad', 'invincibility'];
     if (game.wave > persistent.highWave) {
         persistent.highWave = game.wave;
         savePersistent();
@@ -1899,7 +2353,15 @@ function checkCollisions() {
         game.entities.forEach(e => {
             if (typeof e.type === 'undefined' || e.dead || p.hitList.includes(e)) return;
             if (!isOnScreen(e)) return;
-            if (p.x > e.x && p.x < e.x + e.w && p.y > e.y && p.y < e.y + e.h) {
+            // 더 정확한 충돌 감지 (원형 충돌)
+            const ex = e.x + e.w / 2;
+            const ey = e.y + e.h / 2;
+            const px = p.x;
+            const py = p.y;
+            const dist = Math.sqrt((px - ex)**2 + (py - ey)**2);
+            const hitRadius = Math.min(e.w, e.h) / 2 + p.size;
+            
+            if (dist < hitRadius) {
                 e.takeDamage(p.damage, p.isCrit);
                 p.hitList.push(e);
                 p.onHit();
@@ -1915,7 +2377,15 @@ function checkCollisions() {
             if (s.dead) return;
             if (p.isBossProjectile && !s.isLeader) return;
             
-            if (p.x > s.x && p.x < s.x + s.w && p.y > s.y && p.y < s.y + s.h) {
+            // 더 정확한 충돌 감지
+            const sx = s.x + s.w / 2;
+            const sy = s.y + s.h / 2;
+            const px = p.x;
+            const py = p.y;
+            const dist = Math.sqrt((px - sx)**2 + (py - sy)**2);
+            const hitRadius = Math.min(s.w, s.h) / 2 + p.size;
+            
+            if (dist < hitRadius) {
                 s.takeDamage(p.damage);
                 p.remove = true;
             }
@@ -2049,11 +2519,21 @@ function drawHUD() {
         }
     }
 
+    // CD 게이지를 Rage 게이지로 표시
     const leader = game.squad[0];
     if (leader) {
-        const dashPct = Math.min(1, 1 - leader.dashTimer / leader.dashCooldown);
+        const ragePct = leader.rageGauge / leader.maxRageGauge;
         const staminaBarEl = document.getElementById('stamina-bar');
-        if (staminaBarEl) staminaBarEl.style.width = (dashPct * 100) + '%';
+        if (staminaBarEl) {
+            staminaBarEl.style.width = (ragePct * 100) + '%';
+            // Rage 모드일 때 번쩍이는 효과
+            if (leader.rageMode) {
+                const flash = Math.sin(game.time * 20) * 0.5 + 0.5;
+                staminaBarEl.style.background = `linear-gradient(90deg, rgba(255, ${Math.floor(255 * flash)}, 0, 1), rgba(255, ${Math.floor(200 * flash)}, 0, 1))`;
+            } else {
+                staminaBarEl.style.background = 'linear-gradient(90deg, #0ff, #088)';
+            }
+        }
     }
 
     const waveProgress = game.enemiesSpawned > 0 ? game.killsThisWave / game.enemiesSpawned : 0;
@@ -2120,7 +2600,7 @@ function startGame() {
         entities: [], squad: [], projectiles: [],
         skillEffects: [], particles: [], loots: [],
         damageNumbers: [], muzzleFlashes: [], footprints: [],
-        environmentObjects: [], waveDrops: ['hp', 'gun', 'squad'],
+        environmentObjects: [], waveDrops: ['hp', 'gun', 'squad', 'invincibility'],
         upgradeChoices: [], showUpgradeUI: false,
         combo: 0, comboTimer: 0, maxCombo: 0,
         lootMagnet: 100, warnings: [], killsThisWave: 0,
@@ -2221,16 +2701,47 @@ function loop(ts) {
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const bg = ctx.createRadialGradient(WIDTH/2, HEIGHT/2, 0, WIDTH/2, HEIGHT/2, WIDTH);
-    bg.addColorStop(0, '#0a0a15');
-    bg.addColorStop(1, '#030308');
+    
+    // 배경 그라데이션 (어두운 우주 느낌)
+    const bg = ctx.createRadialGradient(WIDTH/2, HEIGHT/2, 0, WIDTH/2, HEIGHT/2, Math.max(WIDTH, HEIGHT));
+    bg.addColorStop(0, '#0a0a1a');
+    bg.addColorStop(0.5, '#050510');
+    bg.addColorStop(1, '#000005');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    
+    // 별 배경 생성
+    ctx.save();
+    ctx.translate(-game.camera.x * 0.3, -game.camera.y * 0.3);
+    ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < 100; i++) {
+        const starX = (i * 137.5) % (WIDTH * 3);
+        const starY = (i * 197.3) % (HEIGHT * 3);
+        const brightness = (i % 3) * 0.3 + 0.4;
+        ctx.globalAlpha = brightness;
+        ctx.fillRect(starX, starY, 1, 1);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    
+    // 행성/소행성 배경 요소
+    ctx.save();
+    ctx.translate(-game.camera.x * 0.1, -game.camera.y * 0.1);
+    ctx.fillStyle = 'rgba(50, 50, 80, 0.3)';
+    for (let i = 0; i < 5; i++) {
+        const planetX = (i * 500 + game.time * 10) % (WIDTH * 5);
+        const planetY = (i * 300) % (HEIGHT * 5);
+        ctx.beginPath();
+        ctx.arc(planetX, planetY, 30 + i * 10, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.restore();
 
     const sx = (Math.random() - 0.5) * game.shake;
     const sy = (Math.random() - 0.5) * game.shake;
 
-    ctx.strokeStyle = '#151520';
+    // 그리드 (더 어둡게)
+    ctx.strokeStyle = 'rgba(20, 20, 40, 0.3)';
     ctx.lineWidth = 1;
     const ox = -game.camera.x % 100, oy = -game.camera.y % 100;
     ctx.beginPath();

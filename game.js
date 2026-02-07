@@ -115,7 +115,7 @@ let game = {
     invalidStageMessage: '', invalidStageMessageTimer: 0,
     combo: 0, comboTimer: 0, maxCombo: 0,
     lootMagnet: 100, warnings: [], killsThisWave: 0,
-    difficulty: 1.0, extraLives: 0, lastCoinRevive: null
+    difficulty: 1.0, extraLives: 0, lastCoinRevive: null, stageSelectLastTap: null
 };
 
 // 스테이지 맵: id, x, y (비율 0~1), level, icon, adjacent(인접 노드 id 배열)
@@ -328,6 +328,7 @@ const Input = {
                 if (choice !== -1) { selectUpgrade(choice); return; }
             }
             if (game.showStageSelect) {
+                game.stageSelectLastTap = { t: performance.now(), x: canvasX, y: canvasY, cx: canvasX, cy: canvasY };
                 const hit = getStageNodeAt(canvasX, canvasY);
                 if (hit) { selectStage(hit.node); return; }
             }
@@ -2415,16 +2416,22 @@ function getStageNodeAt(mx, my) {
     if (!WIDTH || !HEIGHT) return null;
     const nodes = getStageMapNodes();
     const selectable = getSelectableStageIds();
-    const nodeW = Math.min(48, WIDTH * 0.058);
-    const nodeH = Math.min(36, HEIGHT * 0.045);
-    const hitPad = 60;
+    const headerH = isMobile ? 52 : 64;
+    const mapPad = 16;
+    const mapFooterH = 40;
+    const mapTop = headerH + mapPad;
+    const mapH = HEIGHT - headerH - mapPad * 2 - mapFooterH;
+    const gridCols = 8, gridRows = 12;
+    const cellW = (WIDTH - mapPad * 2) / gridCols;
+    const cellH = mapH / gridRows;
+    const halfCell = Math.max(cellW, cellH) * 0.6;
     for (let i = nodes.length - 1; i >= 0; i--) {
         const n = nodes[i];
         if (!selectable.has(n.id)) continue;
         const pos = getStageNodeScreenPos(n);
-        const sx = pos.x * WIDTH - nodeW / 2;
-        const sy = pos.y * HEIGHT - nodeH / 2;
-        if (mx >= sx - hitPad && mx <= sx + nodeW + hitPad && my >= sy - hitPad && my <= sy + nodeH + hitPad) {
+        const cx = pos.x * WIDTH;
+        const cy = pos.y * HEIGHT;
+        if (mx >= cx - halfCell && mx <= cx + halfCell && my >= cy - halfCell && my <= cy + halfCell) {
             return { node: n, index: i };
         }
     }
@@ -2614,6 +2621,19 @@ function drawStageSelectUI() {
     ctx.fillStyle = '#6a9aba';
     ctx.font = `${isMobile ? 10 : 12}px Arial`;
     ctx.fillText('클리어한 스테이지에 연결된 스테이지만 선택할 수 있습니다', WIDTH / 2, isMobile ? 44 : 56);
+
+    if (game.stageSelectLastTap && (performance.now() - game.stageSelectLastTap.t) < 800) {
+        const tap = game.stageSelectLastTap;
+        ctx.fillStyle = 'rgba(0,255,0,0.8)';
+        ctx.beginPath();
+        ctx.arc(tap.cx, tap.cy, 25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('TAP', tap.cx, tap.cy + 4);
+        ctx.textAlign = 'left';
+    }
 
     const footerH = mapFooterH;
     ctx.strokeStyle = 'rgba(70, 110, 150, 0.35)';
@@ -3296,15 +3316,26 @@ function init() {
     function handleStageSelectClick(clientX, clientY) {
         if (!game.showStageSelect || !stageSelectOverlay) return;
         const rect = stageSelectOverlay.getBoundingClientRect();
-        const scaleX = (rect.width > 0 && WIDTH) ? WIDTH / rect.width : 1;
-        const scaleY = (rect.height > 0 && HEIGHT) ? HEIGHT / rect.height : 1;
-        const cx = (clientX - rect.left) * scaleX;
-        const cy = (clientY - rect.top) * scaleY;
+        let cx, cy;
+        if (rect.width > 0 && rect.height > 0) {
+            const scaleX = WIDTH / rect.width;
+            const scaleY = HEIGHT / rect.height;
+            cx = (clientX - rect.left) * scaleX;
+            cy = (clientY - rect.top) * scaleY;
+        } else {
+            cx = clientX;
+            cy = clientY;
+        }
+        game.stageSelectLastTap = { t: performance.now(), x: clientX, y: clientY, cx, cy };
         const hit = getStageNodeAt(cx, cy);
         if (hit) { selectStage(hit.node); }
     }
     if (stageSelectOverlay) {
         stageSelectOverlay.addEventListener('click', e => handleStageSelectClick(e.clientX, e.clientY));
+        stageSelectOverlay.addEventListener('pointerup', e => {
+            e.preventDefault();
+            handleStageSelectClick(e.clientX, e.clientY);
+        }, { passive: false });
         stageSelectOverlay.addEventListener('touchend', e => {
             e.preventDefault();
             if (e.changedTouches && e.changedTouches[0]) {
@@ -3351,7 +3382,7 @@ function startGame() {
         invalidStageMessage: '', invalidStageMessageTimer: 0,
         combo: 0, comboTimer: 0, maxCombo: 0,
         lootMagnet: 100, warnings: [], killsThisWave: 0,
-        showMinimap: true, difficulty: 1.0, explosionFlash: 0, extraLives: 0, lastCoinRevive: null
+        showMinimap: true, difficulty: 1.0, explosionFlash: 0, extraLives: 0, lastCoinRevive: null, stageSelectLastTap: null
     };
 
     scoreEl.innerText = '0';

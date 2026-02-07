@@ -1,5 +1,6 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+const stageSelectOverlay = document.getElementById('stage-select-overlay');
 
 const startScreen = document.getElementById('start-screen');
 const gameOverScreen = document.getElementById('game-over-screen');
@@ -16,9 +17,28 @@ const ASSETS = {
     beast: new Image(), item_hp: new Image(), item_gun: new Image(),
     healer: new Image(), worm: new Image(), monsterbig: new Image(),
     electric: new Image(), lighting: new Image(), invincibility: new Image(),
-    shotgun: new Image()
+    shotgun: new Image(),
+    spaceBg: new Image(),
+    stageTile1: new Image(), stageTile3: new Image(), stageTile5: new Image(),
+    stageTile7: new Image(), stageTile8: new Image(),
+    pixelHouse: new Image(), pixelTank: new Image(), pixelHeli: new Image(),
+    pixelWarning: new Image(), pixelArmored: new Image(), pixelSpider: new Image(),
+    chest: new Image()
 };
 ASSETS.hero.src = 'hero.png';
+ASSETS.spaceBg.src = 'space_bg.png';
+ASSETS.stageTile1.src = 'Stage Tile Lv. 1 (House).png';
+ASSETS.stageTile3.src = 'Stage Tile Lv. 3 (Squad).png';
+ASSETS.stageTile5.src = 'Stage Tile Lv. 5 (Helicopter).png';
+ASSETS.stageTile7.src = 'Stage Tile Lv. 7 (Armored).png';
+ASSETS.stageTile8.src = 'Stage Tile Lv. 8 (Warning).png';
+ASSETS.pixelHouse.src = 'Pixel Icon_ House.png';
+ASSETS.pixelTank.src = 'Pixel Icon_ Tank_Vehicle.png';
+ASSETS.pixelHeli.src = 'Pixel Icon_ Helicopter.png';
+ASSETS.pixelWarning.src = 'Pixel Icon_ Warning Sign.png';
+ASSETS.pixelArmored.src = 'Pixel Icon_ Armored Figure.png';
+ASSETS.pixelSpider.src = 'Pixel Icon_ Mechanical Spider.png';
+ASSETS.chest.src = 'Advanced_Chest__Open.png';
 ASSETS.grunt.src = 'grunt.png';
 ASSETS.wasp.src = 'wasp.png';
 ASSETS.beast.src = 'beast.png';
@@ -51,24 +71,29 @@ function savePersistent() {
 const WEAPONS = {
     rifle: { name: 'RIFLE', fireRate: 0.15, damage: 10, ammo: 30, spread: 0.05, projectiles: 1, speed: 1500, size: 4, color: '#0ff' },
     shotgun: { name: 'SHOTGUN', fireRate: 0.6, damage: 8, ammo: 8, spread: 0.3, projectiles: 6, speed: 1200, size: 5, color: '#ff0' },
-    laser: { name: 'LASER', fireRate: 0.12, damage: 2, ammo: 100, spread: 0.02, projectiles: 1, speed: 1800, size: 2, color: '#f0f' },
+    laser: { name: 'LASER', fireRate: 0.12, damage: 1, ammo: 100, spread: 0.02, projectiles: 1, speed: 1800, size: 2, color: '#f0f' },
     rocket: { name: 'ROCKET', fireRate: 1.0, damage: 120, ammo: 6, spread: 0, projectiles: 1, speed: 700, size: 14, color: '#f80', explosive: true, explosionRadius: 180 }
 };
 
+const BASE_COIN = 4;
+const BOSS_COIN_MULT = 3;
+const TREASURE_COIN_MULT = 5;
+const REVIVE_COIN_COST = 25;
+
 const UPGRADES = [
-    { id: 'hp_boost', name: 'VITALITY', desc: '+30 Max HP', icon: 'hp', apply: () => { game.squad.forEach(s => { s.maxHp += 30; s.hp = s.maxHp; }); hpBar.style.width = '100%'; }},
-    { id: 'damage', name: 'FIREPOWER', desc: '+25% Damage', icon: 'gun', apply: () => { game.squad.forEach(s => s.bulletDamage *= 1.25); }},
-    { id: 'fire_rate', name: 'RAPIDFIRE', desc: '+20% Fire Rate', icon: 'gun', apply: () => { game.squad.forEach(s => s.fireRate *= 0.8); }},
-    { id: 'ammo', name: 'DEEP POCKETS', desc: '+50% Ammo', icon: 'gun', apply: () => { game.squad.forEach(s => { s.maxAmmo = Math.floor(s.maxAmmo * 1.5); s.ammo = s.maxAmmo; }); }},
-    { id: 'speed', name: 'SWIFT', desc: '+15% Speed', icon: 'hero', apply: () => { game.squad.forEach(s => { s.speed *= 1.15; if (s.baseSpeed) s.speed = Math.min(s.speed, s.baseSpeed * 2); }); }},
-    { id: 'movement_speed', name: 'AGILITY', desc: '+25% Movement Speed', icon: 'hero', apply: () => { game.squad.forEach(s => { s.speed *= 1.25; if (s.baseSpeed) s.speed = Math.min(s.speed, s.baseSpeed * 2); }); }},
-    { id: 'regen', name: 'REGENERATION', desc: 'Slow HP Regen', icon: 'hp', apply: () => { game.squad.forEach(s => s.hasRegen = true); }},
-    { id: 'piercing', name: 'PIERCING', desc: 'Bullets Pierce', icon: 'gun', apply: () => { game.squad.forEach(s => s.piercing = (s.piercing || 0) + 1); }},
-    { id: 'shotgun', name: 'SHOTGUN', desc: 'Spread Weapon', icon: 'gun', apply: () => { game.squad.forEach(s => s.setWeapon('shotgun')); }},
-    { id: 'laser', name: 'LASER GUN', desc: 'Rapid Fire', icon: 'gun', apply: () => { game.squad.forEach(s => s.setWeapon('laser')); }},
-    { id: 'rocket', name: 'ROCKET', desc: 'Explosive', icon: 'gun', apply: () => { game.squad.forEach(s => s.setWeapon('rocket')); }},
-    { id: 'crit', name: 'CRITICAL', desc: '+15% Crit', icon: 'gun', apply: () => { game.squad.forEach(s => s.critChance = (s.critChance || 0.05) + 0.15); }},
-    { id: 'magnet', name: 'MAGNET', desc: 'Attract Loot', icon: 'hp', apply: () => { game.lootMagnet = (game.lootMagnet || 100) + 150; }}
+    { id: 'hp_boost', name: 'VITALITY', desc: '+30 Max HP', icon: 'hp', cost: 12, apply: () => { game.squad.forEach(s => { s.maxHp += 30; s.hp = s.maxHp; }); hpBar.style.width = '100%'; }},
+    { id: 'damage', name: 'FIREPOWER', desc: '+25% Damage', icon: 'gun', cost: 18, apply: () => { game.squad.forEach(s => s.bulletDamage *= 1.25); }},
+    { id: 'fire_rate', name: 'RAPIDFIRE', desc: '+20% Fire Rate', icon: 'gun', cost: 16, apply: () => { game.squad.forEach(s => s.fireRate *= 0.8); }},
+    { id: 'ammo', name: 'DEEP POCKETS', desc: '+50% Ammo', icon: 'gun', cost: 14, apply: () => { game.squad.forEach(s => { s.maxAmmo = Math.floor(s.maxAmmo * 1.5); s.ammo = s.maxAmmo; }); }},
+    { id: 'speed', name: 'SWIFT', desc: '+15% Speed', icon: 'hero', cost: 10, apply: () => { game.squad.forEach(s => { s.speed *= 1.15; if (s.baseSpeed) s.speed = Math.min(s.speed, s.baseSpeed * 2); }); }},
+    { id: 'movement_speed', name: 'AGILITY', desc: '+25% Movement Speed', icon: 'hero', cost: 14, apply: () => { game.squad.forEach(s => { s.speed *= 1.25; if (s.baseSpeed) s.speed = Math.min(s.speed, s.baseSpeed * 2); }); }},
+    { id: 'regen', name: 'REGENERATION', desc: 'Slow HP Regen', icon: 'hp', cost: 22, apply: () => { game.squad.forEach(s => s.hasRegen = true); }},
+    { id: 'piercing', name: 'PIERCING', desc: 'Bullets Pierce', icon: 'gun', cost: 28, apply: () => { game.squad.forEach(s => s.piercing = (s.piercing || 0) + 1); }},
+    { id: 'shotgun', name: 'SHOTGUN', desc: 'Spread Weapon', icon: 'gun', cost: 32, apply: () => { game.squad.forEach(s => s.setWeapon('shotgun')); }},
+    { id: 'laser', name: 'LASER GUN', desc: 'Rapid Fire', icon: 'gun', cost: 30, apply: () => { game.squad.forEach(s => s.setWeapon('laser')); }},
+    { id: 'rocket', name: 'ROCKET', desc: 'Explosive', icon: 'gun', cost: 45, apply: () => { game.squad.forEach(s => s.setWeapon('rocket')); }},
+    { id: 'crit', name: 'CRITICAL', desc: '+15% Crit', icon: 'gun', cost: 20, apply: () => { game.squad.forEach(s => s.critChance = (s.critChance || 0.05) + 0.15); }},
+    { id: 'magnet', name: 'MAGNET', desc: 'Attract Loot', icon: 'hp', cost: 18, apply: () => { game.lootMagnet = (game.lootMagnet || 100) + 150; }}
 ];
 
 let game = {
@@ -81,11 +106,120 @@ let game = {
     skillEffects: [], particles: [], loots: [],
     damageNumbers: [], muzzleFlashes: [], footprints: [],
     environmentObjects: [], waveDrops: [],
-    upgradeChoices: [], showUpgradeUI: false,
+    upgradeChoices: [], showUpgradeUI: false, invalidUpgradeMessage: '', invalidUpgradeMessageTimer: 0,
+    showStageSelect: false, stageLevel: 1,
+    clearedStages: [], currentStageId: 0, currentStageVariant: 'normal',
+    treasureChestSpawned: false, treasureCollected: false,
+    objectiveActive: false, objectiveSpawned: false, objectiveInteractTimer: 0,
+    objectiveX: 0, objectiveY: 0, objectiveW: 60, objectiveH: 50,
+    invalidStageMessage: '', invalidStageMessageTimer: 0,
     combo: 0, comboTimer: 0, maxCombo: 0,
     lootMagnet: 100, warnings: [], killsThisWave: 0,
-    difficulty: 1.0
+    difficulty: 1.0, extraLives: 0, lastCoinRevive: null
 };
+
+// 스테이지 맵: id, x, y (비율 0~1), level, icon, adjacent(인접 노드 id 배열)
+// 규칙 1: 가장 왼쪽(id 0)이 시작 스테이지. 규칙 2: 클리어한 스테이지에 인접한 스테이지만 선택 가능.
+const STAGE_MAP_NODES = [
+    { id: 0, x: 0.06, y: 0.5, level: 1, icon: 'home', adjacent: [1, 2] },
+    { id: 1, x: 0.14, y: 0.35, level: 2, icon: 'grunt', adjacent: [3, 4] },
+    { id: 2, x: 0.14, y: 0.65, level: 2, icon: 'robot', adjacent: [4, 5] },
+    { id: 3, x: 0.22, y: 0.25, level: 3, icon: 'rock', adjacent: [6, 7] },
+    { id: 4, x: 0.22, y: 0.5, level: 3, icon: 'tower', adjacent: [7, 8] },
+    { id: 5, x: 0.22, y: 0.75, level: 3, icon: 'grunt', adjacent: [8, 9] },
+    { id: 6, x: 0.30, y: 0.18, level: 4, icon: 'tank', adjacent: [10, 11] },
+    { id: 7, x: 0.30, y: 0.42, level: 4, icon: 'console', adjacent: [11, 12] },
+    { id: 8, x: 0.30, y: 0.58, level: 4, icon: 'robot', adjacent: [12, 13] },
+    { id: 9, x: 0.30, y: 0.82, level: 4, icon: 'rock', adjacent: [13, 14] },
+    { id: 10, x: 0.38, y: 0.12, level: 5, icon: 'heli', adjacent: [15, 16] },
+    { id: 11, x: 0.38, y: 0.32, level: 5, icon: 'tower', adjacent: [16, 17] },
+    { id: 12, x: 0.38, y: 0.5, level: 5, icon: 'console', adjacent: [17, 18] },
+    { id: 13, x: 0.38, y: 0.68, level: 5, icon: 'rock', adjacent: [18, 19] },
+    { id: 14, x: 0.38, y: 0.88, level: 5, icon: 'grunt', adjacent: [19, 20] },
+    { id: 15, x: 0.46, y: 0.08, level: 6, icon: 'warning', adjacent: [21, 22] },
+    { id: 16, x: 0.46, y: 0.24, level: 6, icon: 'tank', adjacent: [22, 23] },
+    { id: 17, x: 0.46, y: 0.42, level: 6, icon: 'robot', adjacent: [23, 24] },
+    { id: 18, x: 0.46, y: 0.58, level: 6, icon: 'console', adjacent: [24, 25] },
+    { id: 19, x: 0.46, y: 0.76, level: 6, icon: 'tower', adjacent: [25, 26] },
+    { id: 20, x: 0.46, y: 0.92, level: 6, icon: 'rock', adjacent: [26, 27] },
+    { id: 21, x: 0.54, y: 0.04, level: 7, icon: 'boss', adjacent: [28] },
+    { id: 22, x: 0.54, y: 0.18, level: 7, icon: 'warning', adjacent: [28, 29] },
+    { id: 23, x: 0.54, y: 0.34, level: 7, icon: 'heli', adjacent: [29, 30] },
+    { id: 24, x: 0.54, y: 0.5, level: 7, icon: 'console', adjacent: [30, 31] },
+    { id: 25, x: 0.54, y: 0.66, level: 7, icon: 'tank', adjacent: [31, 32] },
+    { id: 26, x: 0.54, y: 0.82, level: 7, icon: 'robot', adjacent: [32, 33] },
+    { id: 27, x: 0.54, y: 0.96, level: 7, icon: 'rock', adjacent: [33] },
+    { id: 28, x: 0.62, y: 0.12, level: 8, icon: 'warning', adjacent: [34, 35] },
+    { id: 29, x: 0.62, y: 0.28, level: 8, icon: 'tower', adjacent: [35, 36] },
+    { id: 30, x: 0.62, y: 0.44, level: 8, icon: 'console', adjacent: [36, 37] },
+    { id: 31, x: 0.62, y: 0.56, level: 8, icon: 'robot', adjacent: [37, 38] },
+    { id: 32, x: 0.62, y: 0.72, level: 8, icon: 'tank', adjacent: [38, 39] },
+    { id: 33, x: 0.62, y: 0.88, level: 8, icon: 'warning', adjacent: [39] },
+    { id: 34, x: 0.70, y: 0.08, level: 9, icon: 'boss', adjacent: [40] },
+    { id: 35, x: 0.70, y: 0.22, level: 9, icon: 'heli', adjacent: [40, 41] },
+    { id: 36, x: 0.70, y: 0.38, level: 9, icon: 'rock', adjacent: [41, 42] },
+    { id: 37, x: 0.70, y: 0.5, level: 9, icon: 'console', adjacent: [42, 43] },
+    { id: 38, x: 0.70, y: 0.62, level: 9, icon: 'tower', adjacent: [43, 44] },
+    { id: 39, x: 0.70, y: 0.78, level: 9, icon: 'robot', adjacent: [44] },
+    { id: 40, x: 0.78, y: 0.18, level: 10, icon: 'warning', adjacent: [45, 46] },
+    { id: 41, x: 0.78, y: 0.32, level: 10, icon: 'tank', adjacent: [46, 47] },
+    { id: 42, x: 0.78, y: 0.46, level: 10, icon: 'console', adjacent: [47, 48] },
+    { id: 43, x: 0.78, y: 0.54, level: 10, icon: 'rock', adjacent: [48, 49] },
+    { id: 44, x: 0.78, y: 0.68, level: 10, icon: 'grunt', adjacent: [49] },
+    { id: 45, x: 0.86, y: 0.14, level: 11, icon: 'boss', adjacent: [50] },
+    { id: 46, x: 0.86, y: 0.28, level: 11, icon: 'warning', adjacent: [50, 51] },
+    { id: 47, x: 0.86, y: 0.42, level: 11, icon: 'heli', adjacent: [51, 52] },
+    { id: 48, x: 0.86, y: 0.5, level: 11, icon: 'console', adjacent: [52, 53] },
+    { id: 49, x: 0.86, y: 0.62, level: 11, icon: 'tower', adjacent: [53] },
+    { id: 50, x: 0.94, y: 0.22, level: 12, icon: 'warning', adjacent: [54] },
+    { id: 51, x: 0.94, y: 0.36, level: 12, icon: 'robot', adjacent: [54, 55] },
+    { id: 52, x: 0.94, y: 0.48, level: 12, icon: 'rock', adjacent: [55, 56] },
+    { id: 53, x: 0.94, y: 0.58, level: 12, icon: 'boss', adjacent: [56] },
+    { id: 54, x: 0.98, y: 0.32, level: 12, icon: 'boss', adjacent: [] },
+    { id: 55, x: 0.98, y: 0.44, level: 12, icon: 'warning', adjacent: [] },
+    { id: 56, x: 0.98, y: 0.52, level: 12, icon: 'boss', adjacent: [] }
+];
+
+function getStageMapNodes() { return STAGE_MAP_NODES; }
+
+function getStageNodeScreenPos(n) {
+    if (!WIDTH || !HEIGHT || WIDTH < 100 || HEIGHT < 100) {
+        return { x: 0.5, y: 0.5 };
+    }
+    const totalRows = 12;
+    const maxCols = 8;
+    const mapPad = 16;
+    const headerH = isMobile ? 52 : 64;
+    const footerH = 40;
+    const mapLeft = mapPad;
+    const mapTop = headerH + mapPad;
+    const mapWidth = Math.max(1, WIDTH - mapPad * 2);
+    const mapHeight = Math.max(1, HEIGHT - headerH - mapPad * 2 - footerH);
+    const row = Math.min(totalRows - 1, n.level - 1);
+    const rowNodes = STAGE_MAP_NODES.filter(m => m.level === n.level).sort((a, b) => a.id - b.id);
+    const col = rowNodes.findIndex(m => m.id === n.id);
+    if (col < 0) return { x: 0.5, y: 0.5 };
+    const rowLen = rowNodes.length;
+    const offset = (maxCols - rowLen) / 2;
+    const pixelX = mapLeft + (offset + col + 0.5) / maxCols * mapWidth;
+    const pixelY = mapTop + (row + 0.5) / totalRows * mapHeight;
+    return { x: Math.max(0, Math.min(1, pixelX / WIDTH)), y: Math.max(0, Math.min(1, pixelY / HEIGHT)) };
+}
+
+function getSelectableStageIds() {
+    const cleared = game.clearedStages || [];
+    const set = new Set(cleared);
+    const selectable = new Set();
+    if (cleared.length === 0) {
+        selectable.add(0);
+        return selectable;
+    }
+    cleared.forEach(id => {
+        const node = STAGE_MAP_NODES.find(n => n.id === id);
+        if (node && node.adjacent) node.adjacent.forEach(adjId => { if (!set.has(adjId)) selectable.add(adjId); });
+    });
+    return selectable;
+}
 
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
     ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
@@ -108,6 +242,9 @@ const Input = {
             }
             if (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3') {
                 if (game.showUpgradeUI) selectUpgrade(parseInt(e.code.slice(-1)) - 1);
+            }
+            if (e.code === 'Digit4' || e.code === 'KeyS') {
+                if (game.showUpgradeUI) selectUpgrade(3);
             }
             if (e.code === 'KeyM') game.showMinimap = !game.showMinimap;
             if (e.code === 'Escape' && game.active) game.paused = !game.paused;
@@ -142,16 +279,32 @@ const Input = {
 
         canvas.addEventListener('mousemove', e => {
             const r = canvas.getBoundingClientRect();
-            this.mouse.x = e.clientX - r.left;
-            this.mouse.y = e.clientY - r.top;
+            const scaleX = (r.width > 0) ? canvas.width / r.width : 1;
+            const scaleY = (r.height > 0) ? canvas.height / r.height : 1;
+            this.mouse.x = (e.clientX - r.left) * scaleX;
+            this.mouse.y = (e.clientY - r.top) * scaleY;
             this.lastMove = performance.now();
         });
+        const handleCanvasClick = (clientX, clientY) => {
+            const r = canvas.getBoundingClientRect();
+            const scaleX = (r.width > 0) ? canvas.width / r.width : 1;
+            const scaleY = (r.height > 0) ? canvas.height / r.height : 1;
+            const cx = (clientX - r.left) * scaleX;
+            const cy = (clientY - r.top) * scaleY;
+            if (game.showUpgradeUI) {
+                const choice = getUpgradeChoiceAt(cx, cy);
+                if (choice !== -1) selectUpgrade(choice);
+            } else if (game.showStageSelect) {
+                const hit = getStageNodeAt(cx, cy);
+                if (hit) selectStage(hit.node);
+            }
+        };
         canvas.addEventListener('mousedown', e => {
             this.mouse.down = true;
-            if (game.showUpgradeUI) {
-                const choice = getUpgradeChoiceAt(e.clientX, e.clientY);
-                if (choice !== -1) selectUpgrade(choice);
-            }
+            handleCanvasClick(e.clientX, e.clientY);
+        });
+        canvas.addEventListener('click', e => {
+            handleCanvasClick(e.clientX, e.clientY);
         });
         canvas.addEventListener('mouseup', () => { this.mouse.down = false; });
         this.initTouch();
@@ -165,12 +318,18 @@ const Input = {
             e.preventDefault();
             const touch = e.touches[0];
             const rect = canvas.getBoundingClientRect();
-            const canvasX = touch.clientX - rect.left;
-            const canvasY = touch.clientY - rect.top;
+            const scaleX = (rect.width > 0) ? canvas.width / rect.width : 1;
+            const scaleY = (rect.height > 0) ? canvas.height / rect.height : 1;
+            const canvasX = (touch.clientX - rect.left) * scaleX;
+            const canvasY = (touch.clientY - rect.top) * scaleY;
             
             if (game.showUpgradeUI) {
                 const choice = getUpgradeChoiceAt(canvasX, canvasY);
                 if (choice !== -1) { selectUpgrade(choice); return; }
+            }
+            if (game.showStageSelect) {
+                const hit = getStageNodeAt(canvasX, canvasY);
+                if (hit) { selectStage(hit.node); return; }
             }
             if (game.paused || !game.active) return;
             
@@ -189,8 +348,10 @@ const Input = {
             
             const touch = e.touches[0];
             const rect = canvas.getBoundingClientRect();
-            const canvasX = touch.clientX - rect.left;
-            const canvasY = touch.clientY - rect.top;
+            const scaleX = (rect.width > 0) ? canvas.width / rect.width : 1;
+            const scaleY = (rect.height > 0) ? canvas.height / rect.height : 1;
+            const canvasX = (touch.clientX - rect.left) * scaleX;
+            const canvasY = (touch.clientY - rect.top) * scaleY;
             
             self.touch.currentX = canvasX;
             self.touch.currentY = canvasY;
@@ -294,9 +455,12 @@ class Entity {
     applyGravity(dt) { this.x += this.vx * dt; this.y += this.vy * dt; }
 }
 
+// 고정 배경에 맞춘 크기 (화면 비율에 맞게 축소)
+const ENTITY_SCALE = 0.72;
+
 class Player extends Entity {
     constructor(x, y, isLeader = false, followTarget = null) {
-        const scale = isMobile ? 0.6 : 1;
+        const scale = (isMobile ? 0.6 : 1) * ENTITY_SCALE;
         super(x, y, 60 * scale, 90 * scale);
         this.isLeader = isLeader;
         this.followTarget = followTarget;
@@ -484,7 +648,7 @@ class Player extends Entity {
         this.invulnerable = Math.max(0, this.invulnerable - dt);
 
         if (this.hasRegen && this.hp < this.maxHp) {
-            this.hp = Math.min(this.maxHp, this.hp + 3 * dt);
+            this.hp = Math.min(this.maxHp, this.hp + 1 * dt);
             if (this.isLeader) hpBar.style.width = (this.hp / this.maxHp * 100) + '%';
         }
         
@@ -540,7 +704,7 @@ class Player extends Entity {
         if (this.ammo <= 0 && !this.reloading) this.reload();
 
         // 화면에 보이는 적만 체크
-        const hasTarget = game.entities.some(e => e instanceof Enemy && !e.dead && isOnScreen(e));
+        const hasTarget = game.entities.some(e => (e instanceof Enemy || e instanceof TreasureChest) && !e.dead && isOnScreen(e));
         // 자동 공격 (마우스 클릭 없이)
         const shouldFire = hasTarget;
         
@@ -556,13 +720,20 @@ class Player extends Entity {
         if (this.skillType) {
             this.skillTimer -= dt;
             // 화면에 보이는 적이 있을 때만 스킬 사용
-            const hasVisibleEnemy = game.entities.some(e => e instanceof Enemy && !e.dead && isOnScreen(e));
+            const hasVisibleEnemy = game.entities.some(e => (e instanceof Enemy || e instanceof TreasureChest) && !e.dead && isOnScreen(e));
             if (this.skillTimer <= 0 && (hasVisibleEnemy || this.skillType === 'HEAL')) {
                 this.triggerSkill();
-                this.skillTimer = this.skillCooldown;
+                this.skillTimer = (this.skillType === 'HEAL') ? 2.5 : this.skillCooldown;
             }
         }
         this.applyGravity(dt);
+
+        // 카메라 고정 모드: 캐릭터가 화면 안에서만 이동하도록
+        const margin = 15;
+        if (this.x < margin) { this.x = margin; this.vx = 0; }
+        if (this.x > WIDTH - this.w - margin) { this.x = WIDTH - this.w - margin; this.vx = 0; }
+        if (this.y < margin) { this.y = margin; this.vy = 0; }
+        if (this.y > HEIGHT - this.h - margin) { this.y = HEIGHT - this.h - margin; this.vy = 0; }
     }
 
     triggerSkill() {
@@ -591,7 +762,7 @@ class Player extends Entity {
             chainEffect.chainRange = 700;
             game.skillEffects.push(chainEffect);
         } else if (this.skillType === 'HEAL') {
-            game.squad.forEach(m => { if (!m.dead) m.hp = Math.min(m.maxHp, m.hp + 25); });
+            game.squad.forEach(m => { if (!m.dead) m.hp = Math.min(m.maxHp, m.hp + 8); });
             game.skillEffects.push(new SkillEffect(cx, cy, 'HEAL', 0));
             if (game.squad[0]) hpBar.style.width = (game.squad[0].hp / game.squad[0].maxHp * 100) + '%';
         }
@@ -600,9 +771,8 @@ class Player extends Entity {
     getNearestEnemy() {
         let nearest = null, minDist = Infinity;
         game.entities.forEach(e => {
-            if (e instanceof Enemy && !e.dead) {
-                // 화면에 보이는 적만 선택
-                if (!isOnScreen(e)) return;
+            const isTarget = (e instanceof Enemy && !e.dead) || (e instanceof TreasureChest && !e.dead);
+            if (isTarget && isOnScreen(e)) {
                 const dist = (e.x - this.x) ** 2 + (e.y - this.y) ** 2;
                 if (dist < minDist) { minDist = dist; nearest = e; }
             }
@@ -670,7 +840,28 @@ class Player extends Entity {
             this.lastDamageTime = game.time;
         }
         
-        if (this.hp <= 0) { this.hp = 0; this.dead = true; if (this.isLeader) endGame(); }
+        if (this.hp <= 0 && this.isLeader) {
+            this.hp = 0;
+            if (game.extraLives > 0) {
+                game.extraLives--;
+                this.hp = this.maxHp;
+                this.dead = false;
+                this.invulnerable = 2.0;
+                game.damageNumbers.push(new DamageNumber(this.x + this.w/2, this.y, 'EXTRA LIFE!', true));
+            } else if (game.coins >= REVIVE_COIN_COST) {
+                const before = game.coins;
+                game.coins -= REVIVE_COIN_COST;
+                game.lastCoinRevive = { spent: REVIVE_COIN_COST, before, after: game.coins };
+                this.hp = 1;
+                this.dead = false;
+                this.invulnerable = 2.0;
+            } else {
+                this.dead = true;
+                endGame();
+            }
+        } else if (this.hp <= 0) {
+            this.hp = 0; this.dead = true;
+        }
         if (this.isLeader) hpBar.style.width = (this.hp / this.maxHp * 100) + '%';
     }
 
@@ -746,7 +937,7 @@ class Player extends Entity {
 
 class Enemy extends Entity {
     constructor(x, y, type, lootDrop = null) {
-        const scale = isMobile ? 0.6 : 1;
+        const scale = (isMobile ? 0.6 : 1) * ENTITY_SCALE;
         super(x, y, 50 * scale, 80 * scale);
         this.type = type;
         this.lootDrop = lootDrop;
@@ -796,21 +987,20 @@ class Enemy extends Entity {
             this.slamTimer = undefined;
         }
 
-        const waveBonus = game.wave <= 3 ? 1 + (game.wave - 1) * 0.05 : 
-                          game.wave <= 7 ? 1.1 + (game.wave - 3) * 0.15 :
-                          game.wave <= 10 ? 1.7 + (game.wave - 7) * 0.25 :
-                          2.45 + (game.wave - 10) * 0.35;
+        const L = game.stageLevel || 1;
+        const waveBonus = 1 + (L - 1) * 0.48;
+        const dmgBonus = 1 + (L - 1) * 0.18;
         
         const stats = {
-            grunt: { hp: 50 * waveBonus, speed: 90 + game.wave * 6, score: 100, coins: 5, w: 70, h: 90, damage: 5 + game.wave * 1.5 },
-            wasp: { hp: 30 * waveBonus, speed: 160 + game.wave * 10, score: 150, coins: 8, w: 50, h: 50, damage: 4 + game.wave * 1.2 },
-            beast: { hp: 400 * waveBonus, speed: 50 + game.wave * 4, score: 1000, coins: 50, w: 150, h: 130, damage: 15 + game.wave * 2.5 },
-            sniper: { hp: 35 * waveBonus, speed: 60 + game.wave * 4, score: 200, coins: 15, w: 60, h: 80, damage: 12 + game.wave * 2.5 },
-            bomber: { hp: 45 * waveBonus, speed: 140 + game.wave * 12, score: 250, coins: 20, w: 50, h: 50, damage: 25 + game.wave * 3.5 },
-            worm: { hp: 80 * waveBonus, speed: 120 + game.wave * 8, score: 180, coins: 12, w: 60, h: 40, damage: 8 + game.wave * 2 },
-            titan: { hp: 600 * waveBonus, speed: 30 + game.wave * 2, score: 1500, coins: 80, w: 180, h: 160, damage: 25 + game.wave * 3 },
-            electric: { hp: 60 * waveBonus, speed: 100 + game.wave * 7, score: 220, coins: 18, w: 55, h: 55, damage: 10 + game.wave * 2.2 },
-            boss: { hp: 1500 + game.wave * 600, speed: 40 + game.wave * 4, score: 5000, coins: 200, w: 200, h: 180, damage: 20 + game.wave * 4 }
+            grunt: { hp: 55 * waveBonus, speed: 95 + L * 8, score: 100, coins: BASE_COIN, w: 70, h: 90, damage: (6 + L * 2) * dmgBonus },
+            wasp: { hp: 35 * waveBonus, speed: 165 + L * 12, score: 150, coins: Math.floor(BASE_COIN * 1.2), w: 50, h: 50, damage: (5 + L * 1.5) * dmgBonus },
+            beast: { hp: 450 * waveBonus, speed: 55 + L * 5, score: 1000, coins: Math.floor(BASE_COIN * 6), w: 150, h: 130, damage: (18 + L * 3) * dmgBonus },
+            sniper: { hp: 40 * waveBonus, speed: 65 + L * 5, score: 200, coins: Math.floor(BASE_COIN * 1.5), w: 60, h: 80, damage: (14 + L * 3) * dmgBonus },
+            bomber: { hp: 50 * waveBonus, speed: 145 + L * 14, score: 250, coins: Math.floor(BASE_COIN * 2), w: 50, h: 50, damage: (28 + L * 4) * dmgBonus },
+            worm: { hp: 90 * waveBonus, speed: 125 + L * 10, score: 180, coins: Math.floor(BASE_COIN * 2), w: 60, h: 40, damage: (10 + L * 2.5) * dmgBonus },
+            titan: { hp: 700 * waveBonus, speed: 32 + L * 2.5, score: 1500, coins: Math.floor(BASE_COIN * 8), w: 180, h: 160, damage: (28 + L * 4) * dmgBonus },
+            electric: { hp: 70 * waveBonus, speed: 105 + L * 9, score: 220, coins: Math.floor(BASE_COIN * 2.2), w: 55, h: 55, damage: (12 + L * 2.5) * dmgBonus },
+            boss: { hp: 1800 + L * 750, speed: 42 + L * 5, score: 5000, coins: BASE_COIN * BOSS_COIN_MULT, w: 200, h: 180, damage: (24 + L * 5) * dmgBonus }
         };
 
         const s = stats[type] || stats.grunt;
@@ -849,6 +1039,25 @@ class Enemy extends Entity {
 
     update(dt) {
         if (this.dead) return;
+
+        if (!isOnScreen(this)) {
+            const cx = WIDTH / 2;
+            const cy = HEIGHT / 2;
+            const toCenterX = cx - (this.x + this.w / 2);
+            const toCenterY = cy - (this.y + this.h / 2);
+            const d = Math.sqrt(toCenterX * toCenterX + toCenterY * toCenterY);
+            const speedMult = this.type === 'boss' ? 5.5 : 1.1;
+            if (d > 5) {
+                this.vx = (toCenterX / d) * this.speed * speedMult;
+                this.vy = (toCenterY / d) * this.speed * speedMult;
+            } else {
+                this.vx = 0;
+                this.vy = 0;
+            }
+            this.facingRight = toCenterX > 0;
+            this.applyGravity(dt);
+            return;
+        }
 
         let target = game.squad.find(p => !p.dead);
         let minD = Infinity;
@@ -904,6 +1113,14 @@ class Enemy extends Entity {
 
         this.facingRight = this.vx > 0 || (this.vx === 0 && dx > 0);
         this.applyGravity(dt);
+
+        if (this.type === 'boss' && isOnScreen(this)) {
+            const margin = 15;
+            if (this.x < margin) { this.x = margin; this.vx = Math.max(0, this.vx); }
+            if (this.x > WIDTH - this.w - margin) { this.x = WIDTH - this.w - margin; this.vx = Math.min(0, this.vx); }
+            if (this.y < margin) { this.y = margin; this.vy = Math.max(0, this.vy); }
+            if (this.y > HEIGHT - this.h - margin) { this.y = HEIGHT - this.h - margin; this.vy = Math.min(0, this.vy); }
+        }
     }
 
     updateGruntAI(dt, target, dist, dirX, dirY) {
@@ -1358,20 +1575,23 @@ class Enemy extends Entity {
         const cx = this.x + this.w / 2, cy = this.y + this.h / 2;
         const pattern = Math.floor(Math.random() * 5);
         
+        const bossRef = this;
         if (pattern === 0) {
             const a = Math.atan2(target.y - cy, target.x - cx);
             for (let i = 0; i < 9; i++) {
-                const p = new Projectile(cx, cy, a - 0.6 + i * 0.15, 200, 15, false, 8, '#f00'); // 2배 느리게
+                const p = new Projectile(cx, cy, a - 0.6 + i * 0.15, 200, 15, false, 8, '#f00');
                 p.isBossProjectile = true;
+                p.owner = bossRef;
                 p.life = 10;
                 game.projectiles.push(p);
             }
         } else if (pattern === 1) {
             for (let i = 0; i < 16; i++) {
                 setTimeout(() => {
-                    if (!this.dead) {
-                        const p = new Projectile(cx, cy, game.time * 5 + i * Math.PI / 8, 175, 12, false, 6, '#ff0'); // 2배 느리게
+                    if (!bossRef.dead) {
+                        const p = new Projectile(bossRef.x + bossRef.w/2, bossRef.y + bossRef.h/2, game.time * 5 + i * Math.PI / 8, 175, 12, false, 6, '#ff0');
                         p.isBossProjectile = true;
+                        p.owner = bossRef;
                         p.life = 10;
                         game.projectiles.push(p);
                     }
@@ -1379,10 +1599,11 @@ class Enemy extends Entity {
             }
         } else if (pattern === 2) {
             for (let i = 0; i < 4; i++) {
-                const p = new Projectile(cx, cy, Math.atan2(target.y - cy, target.x - cx) + (i - 1.5) * 0.4, 100, 18, false, 10, '#f80'); // 2배 느리게
+                const p = new Projectile(cx, cy, Math.atan2(target.y - cy, target.x - cx) + (i - 1.5) * 0.4, 100, 18, false, 10, '#f80');
                 p.homing = true;
                 p.homingStrength = 4;
                 p.isBossProjectile = true;
+                p.owner = bossRef;
                 p.life = 10;
                 game.projectiles.push(p);
             }
@@ -1394,8 +1615,9 @@ class Enemy extends Entity {
             }
         } else {
             for (let i = 0; i < 20; i++) {
-                const p = new Projectile(cx, cy, i * Math.PI / 10, 125, 10, false, 5, '#f0f'); // 2배 느리게
+                const p = new Projectile(cx, cy, i * Math.PI / 10, 125, 10, false, 5, '#f0f');
                 p.isBossProjectile = true;
+                p.owner = bossRef;
                 p.life = 10;
                 game.projectiles.push(p);
             }
@@ -1414,6 +1636,9 @@ class Enemy extends Entity {
 
         if (this.hp <= 0) {
             this.hp = 0; this.dead = true;
+            if (this.type === 'boss') {
+                game.projectiles.forEach(proj => { if (proj.owner === this) proj.remove = true; });
+            }
             game.score += this.score * (1 + game.combo * 0.1);
             game.coins += this.coins;
             game.combo++;
@@ -1529,6 +1754,7 @@ class Enemy extends Entity {
 class Projectile {
     constructor(x, y, angle, speed, damage, isPlayer, size, color) {
         this.x = x; this.y = y;
+        this.lastX = x; this.lastY = y;
         this.vx = Math.cos(angle) * speed;
         this.vy = Math.sin(angle) * speed;
         this.speed = speed; this.damage = damage;
@@ -1543,11 +1769,13 @@ class Projectile {
 }
 
     update(dt) {
+        this.lastX = this.x;
+        this.lastY = this.y;
         this.trail.push({ x: this.x, y: this.y, life: 0.1 });
         this.trail = this.trail.filter(t => { t.life -= dt; return t.life > 0; });
 
         if (this.homing) {
-            const targets = this.isPlayer ? game.entities.filter(e => e instanceof Enemy && !e.dead) : game.squad.filter(p => !p.dead && p.isLeader);
+            const targets = this.isPlayer ? game.entities.filter(e => e instanceof Enemy && !e.dead && isOnScreen(e)) : game.squad.filter(p => !p.dead && p.isLeader);
             let nearest = null, minD = Infinity;
             targets.forEach(t => { const d = (t.x - this.x)**2 + (t.y - this.y)**2; if (d < minD) { minD = d; nearest = t; } });
             if (nearest) {
@@ -1600,7 +1828,8 @@ class Projectile {
             
             game.entities.forEach(e => {
                 if (e.dead || this.hitList.includes(e)) return;
-                const dist = Math.sqrt((e.x + e.w/2 - this.x)**2 + (e.y + e.h/2 - this.y)**2);
+                const ew = e.w || 40, eh = e.h || 40;
+                const dist = Math.sqrt((e.x + ew/2 - this.x)**2 + (e.y + eh/2 - this.y)**2);
                 if (dist < radius) {
                     const falloff = 1 - (dist / radius) * 0.5;
                     e.takeDamage(this.damage * falloff, this.isCrit);
@@ -1907,6 +2136,75 @@ class SkillEffect {
     }
 }
 
+class TreasureChest {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.w = 300;
+        this.h = 240;
+        this.type = 'treasureChest';
+        this.dead = false;
+        this.breakTime = 5;
+        this.damageAccumulator = 0;
+        this.lastHitTime = 0;
+    }
+    takeDamage(amount) {
+        if (this.dead) return;
+        this.lastHitTime = game.time;
+    }
+    update(dt) {
+        if (this.dead) return;
+        if (game.time - this.lastHitTime < 0.2) {
+            this.damageAccumulator += dt;
+            if (this.damageAccumulator >= this.breakTime) {
+                this.dead = true;
+                const treasureCoins = BASE_COIN * TREASURE_COIN_MULT;
+                if (game.extraLives > 0) {
+                    game.coins += treasureCoins;
+                    game.damageNumbers.push(new DamageNumber(this.x + this.w/2, this.y + this.h/2, `+${treasureCoins} COINS`, true));
+                    game.treasureCollected = true;
+                } else if (Math.random() < 0.5) {
+                    const loot = new Loot(this.x + this.w / 2 - 20, this.y + this.h / 2 - 20, 'extra_life');
+                    loot.fromTreasureChest = true;
+                    game.loots.push(loot);
+                } else {
+                    game.coins += treasureCoins;
+                    game.damageNumbers.push(new DamageNumber(this.x + this.w/2, this.y + this.h/2, `+${treasureCoins} COINS`, true));
+                    game.treasureCollected = true;
+                }
+                for (let i = 0; i < 15; i++) {
+                    game.particles.push(new Particle(this.x + this.w / 2, this.y + this.h / 2, '#ffd700'));
+                }
+            }
+        } else {
+            this.damageAccumulator = 0;
+        }
+    }
+    draw(ctx) {
+        if (this.dead) return;
+        if (this.damageAccumulator > 0) {
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(this.x, this.y + this.h + 8, this.w, 10);
+            ctx.fillStyle = '#ffd700';
+            ctx.fillRect(this.x, this.y + this.h + 8, this.w * (this.damageAccumulator / this.breakTime), 10);
+        }
+        const img = ASSETS.chest;
+        if (img && img.complete && img.naturalWidth > 0) {
+            ctx.drawImage(img, this.x, this.y, this.w, this.h);
+        } else {
+            ctx.fillStyle = 'rgba(80, 60, 40, 0.9)';
+            ctx.fillRect(this.x, this.y, this.w, this.h);
+            ctx.strokeStyle = '#a08040';
+            ctx.strokeRect(this.x, this.y, this.w, this.h);
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 42px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('보물', this.x + this.w / 2, this.y + this.h / 2 + 15);
+            ctx.textAlign = 'left';
+        }
+    }
+}
+
 class Loot {
     constructor(x, y, type) {
         const scale = isMobile ? 0.7 : 1;
@@ -1922,16 +2220,19 @@ class Loot {
             const dx = leader.x + leader.w/2 - this.x;
             const dy = leader.y + leader.h/2 - this.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
-            
-            if (dist < game.lootMagnet) {
-                const t = 1 - (dist / game.lootMagnet);
+            const noEnemiesLeft = !game.entities.some(e => e instanceof Enemy && !e.dead);
+
+            if (noEnemiesLeft && dist > 1) {
+                const pullSpeed = this.fromTreasureChest ? 420 : 840;
+                this.vx = (dx / dist) * pullSpeed;
+                this.vy = (dy / dist) * pullSpeed;
+            } else if (dist < (game.lootMagnet || 100)) {
+                const t = 1 - (dist / (game.lootMagnet || 100));
                 const magnetStrength = 100 + Math.pow(t, 2) * 1500;
-                
                 if (dist > 1) {
                     this.vx += (dx / dist) * magnetStrength * dt;
                     this.vy += (dy / dist) * magnetStrength * dt;
                 }
-                
                 const maxSpeed = 200 + t * 800;
                 const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
                 if (currentSpeed > maxSpeed) {
@@ -1954,8 +2255,8 @@ class Loot {
         const s = 1 + Math.sin(game.time * 10) * 0.1;
         ctx.scale(s, s);
         ctx.shadowBlur = 20;
-        ctx.shadowColor = this.type === 'hp' ? '#ff0' : (this.type === 'gun' ? '#0ff' : (this.type === 'invincibility' ? '#ff0' : '#ff0')); // HP를 노란색으로 변경 (CD 리셋)
-        let img = this.type === 'hp' ? ASSETS.item_hp : (this.type === 'gun' ? ASSETS.item_gun : (this.type === 'invincibility' ? ASSETS.invincibility : ASSETS.hero));
+        ctx.shadowColor = this.type === 'hp' || this.type === 'extra_life' ? '#ff0' : (this.type === 'gun' ? '#0ff' : (this.type === 'invincibility' ? '#ff0' : '#ff0'));
+        let img = this.type === 'hp' || this.type === 'extra_life' ? ASSETS.item_hp : (this.type === 'gun' ? ASSETS.item_gun : (this.type === 'invincibility' ? ASSETS.invincibility : ASSETS.hero));
         const size = 40 * this.scale;
         if (img && img.complete && img.naturalWidth > 0) {
             ctx.drawImage(img, -size/2, -size/2, size, size);
@@ -1966,7 +2267,7 @@ class Loot {
         ctx.fillStyle = '#fff';
         ctx.font = `bold ${10 * this.scale}px Arial`;
         ctx.textAlign = 'center';
-        const labels = { hp: 'CD RESET', gun: 'UPGRADE', squad: 'ALLY', invincibility: 'INVINCIBLE' };
+        const labels = { hp: 'CD RESET', gun: 'UPGRADE', squad: 'ALLY', invincibility: 'INVINCIBLE', extra_life: 'LIFE' };
         ctx.fillText(labels[this.type] || '', 0, 35 * this.scale);
         ctx.textAlign = 'left';
         ctx.restore();
@@ -2068,16 +2369,30 @@ class EnvironmentObject {
 }
 
 function showUpgradeSelection() {
+    game.lastStageVariant = game.currentStageVariant;
     game.showUpgradeUI = true;
     game.paused = true;
     game.upgradeChoices = [...UPGRADES].sort(() => Math.random() - 0.5).slice(0, 3);
 }
 
 function selectUpgrade(index) {
+    if (index === 3) {
+        game.showUpgradeUI = false;
+        game.showStageSelect = true;
+        return;
+    }
     if (index < 0 || index >= game.upgradeChoices.length) return;
-    game.upgradeChoices[index].apply();
+    const up = game.upgradeChoices[index];
+    const cost = up.cost || 0;
+    if (game.coins < cost) {
+        game.invalidUpgradeMessage = `코인이 부족합니다 (필요: ${cost})`;
+        game.invalidUpgradeMessageTimer = 2;
+        return;
+    }
+    game.coins -= cost;
+    up.apply();
     game.showUpgradeUI = false;
-    game.paused = false;
+    game.showStageSelect = true;
 }
 
 function getUpgradeChoiceAt(mx, my) {
@@ -2090,10 +2405,75 @@ function getUpgradeChoiceAt(mx, my) {
         const cx = startX + i * (cardW + gap);
         if (mx >= cx && mx <= cx + cardW && my >= startY && my <= startY + cardH) return i;
     }
+    const skipW = 120, skipH = 44;
+    const skipX = WIDTH / 2 - skipW / 2, skipY = HEIGHT - 80;
+    if (mx >= skipX && mx <= skipX + skipW && my >= skipY && my <= skipY + skipH) return 3;
     return -1;
 }
 
+function getStageNodeAt(mx, my) {
+    if (!WIDTH || !HEIGHT) return null;
+    const nodes = getStageMapNodes();
+    const selectable = getSelectableStageIds();
+    const nodeW = Math.min(48, WIDTH * 0.058);
+    const nodeH = Math.min(36, HEIGHT * 0.045);
+    const hitPad = 60;
+    for (let i = nodes.length - 1; i >= 0; i--) {
+        const n = nodes[i];
+        if (!selectable.has(n.id)) continue;
+        const pos = getStageNodeScreenPos(n);
+        const sx = pos.x * WIDTH - nodeW / 2;
+        const sy = pos.y * HEIGHT - nodeH / 2;
+        if (mx >= sx - hitPad && mx <= sx + nodeW + hitPad && my >= sy - hitPad && my <= sy + nodeH + hitPad) {
+            return { node: n, index: i };
+        }
+    }
+    return null;
+}
+
+function isOverSelectableStageNode(mx, my) {
+    return getStageNodeAt(mx, my) !== null;
+}
+
+const STAGE_VARIANTS = [
+    { id: 'normal', weight: 50 },
+    { id: 'treasure', weight: 22 },
+    { id: 'double_boss', weight: 18 },
+    { id: 'elite', weight: 10 }
+];
+
+function rollStageVariant(excludeId) {
+    const pool = excludeId ? STAGE_VARIANTS.filter(v => v.id !== excludeId) : STAGE_VARIANTS;
+    if (pool.length === 0) return 'normal';
+    const total = pool.reduce((s, v) => s + v.weight, 0);
+    let r = Math.random() * total;
+    for (const v of pool) {
+        r -= v.weight;
+        if (r <= 0) return v.id;
+    }
+    return pool[pool.length - 1].id;
+}
+
+function selectStage(node) {
+    const selectable = getSelectableStageIds();
+    if (!selectable.has(node.id)) {
+        game.invalidStageMessage = '이전 스테이지를 먼저 클리어해주세요.';
+        game.invalidStageMessageTimer = 2.5;
+        return;
+    }
+    game.invalidStageMessage = '';
+    game.invalidStageMessageTimer = 0;
+    game.currentStageId = node.id;
+    game.stageLevel = node.level;
+    game.currentStageVariant = rollStageVariant(game.lastStageVariant);
+    game.showStageSelect = false;
+    game.paused = false;
+    nextWave();
+}
+
 function drawUpgradeUI() {
+    if (game.invalidUpgradeMessageTimer > 0) game.invalidUpgradeMessageTimer -= 0.016;
+
     ctx.fillStyle = 'rgba(0,0,0,0.85)';
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
@@ -2101,9 +2481,12 @@ function drawUpgradeUI() {
     ctx.font = `bold ${isMobile ? 24 : 36}px Arial`; 
     ctx.textAlign = 'center';
     ctx.fillText('CHOOSE UPGRADE', WIDTH / 2, isMobile ? 50 : 70);
+    ctx.fillStyle = '#ffd700';
+    ctx.font = `bold ${isMobile ? 18 : 24}px Arial`;
+    ctx.fillText(`💰 ${game.coins} 코인`, WIDTH / 2, isMobile ? 72 : 95);
     ctx.fillStyle = '#888'; 
     ctx.font = `${isMobile ? 12 : 16}px Arial`;
-    ctx.fillText(isMobile ? 'Tap to select' : 'Press 1, 2, 3 or Click', WIDTH / 2, isMobile ? 75 : 100);
+    ctx.fillText(isMobile ? 'Tap to select (코인 필요) | 스킵 가능' : '1,2,3 Click | 4 or S: Skip', WIDTH / 2, isMobile ? 88 : 118);
 
     const cardW = isMobile ? 150 : 200;
     const cardH = isMobile ? 200 : 280;
@@ -2113,26 +2496,234 @@ function drawUpgradeUI() {
 
     game.upgradeChoices.forEach((up, i) => {
         const cx = startX + i * (cardW + gap);
-        ctx.fillStyle = '#1a1a2e'; ctx.fillRect(cx, startY, cardW, cardH);
-        ctx.strokeStyle = '#0ff'; ctx.lineWidth = 2; ctx.strokeRect(cx, startY, cardW, cardH);
+        const cost = up.cost || 0;
+        const canAfford = game.coins >= cost;
+        ctx.fillStyle = canAfford ? '#1a1a2e' : '#0f0f18';
+        ctx.fillRect(cx, startY, cardW, cardH);
+        ctx.strokeStyle = canAfford ? '#0ff' : '#555';
+        ctx.lineWidth = 2; ctx.strokeRect(cx, startY, cardW, cardH);
         if (!isMobile) {
-            ctx.fillStyle = '#0ff'; ctx.font = 'bold 24px Arial';
+            ctx.fillStyle = canAfford ? '#0ff' : '#555';
+            ctx.font = 'bold 24px Arial';
             ctx.fillText(`[${i + 1}]`, cx + cardW / 2, startY + 35);
         }
+        ctx.fillStyle = canAfford ? '#ffd700' : '#666';
+        ctx.font = `bold ${isMobile ? 14 : 16}px Arial`;
+        ctx.fillText(`${cost} 코인`, cx + cardW / 2, startY + (isMobile ? 55 : 70));
         const iconImg = up.icon === 'hp' ? ASSETS.item_hp : (up.icon === 'gun' ? ASSETS.item_gun : ASSETS.hero);
-        const iconY = isMobile ? startY + 20 : startY + 50;
+        const iconY = isMobile ? startY + 65 : startY + 85;
         const iconSize = isMobile ? 50 : 60;
         if (iconImg && iconImg.complete && iconImg.naturalWidth > 0) {
+            ctx.globalAlpha = canAfford ? 1 : 0.5;
             ctx.drawImage(iconImg, cx + cardW/2 - iconSize/2, iconY, iconSize, iconSize);
+            ctx.globalAlpha = 1;
         } else {
             ctx.fillStyle = '#0ff'; ctx.font = `${isMobile ? 36 : 48}px Arial`;
             ctx.fillText('?', cx + cardW / 2, iconY + iconSize - 10);
         }
-        ctx.fillStyle = '#fff'; ctx.font = `bold ${isMobile ? 14 : 18}px Arial`;
-        ctx.fillText(up.name, cx + cardW / 2, isMobile ? startY + 100 : startY + 140);
-        ctx.fillStyle = '#aaa'; ctx.font = `${isMobile ? 11 : 14}px Arial`;
-        ctx.fillText(up.desc, cx + cardW / 2, isMobile ? startY + 125 : startY + 170);
+        ctx.fillStyle = canAfford ? '#fff' : '#888';
+        ctx.font = `bold ${isMobile ? 14 : 18}px Arial`;
+        ctx.fillText(up.name, cx + cardW / 2, isMobile ? startY + 145 : startY + 175);
+        ctx.fillStyle = canAfford ? '#aaa' : '#555';
+        ctx.font = `${isMobile ? 11 : 14}px Arial`;
+        ctx.fillText(up.desc, cx + cardW / 2, isMobile ? startY + 165 : startY + 200);
     });
+
+    const skipW = 120, skipH = 44;
+    const skipX = WIDTH / 2 - skipW / 2, skipY = HEIGHT - 80;
+    ctx.fillStyle = '#2a2a3a';
+    ctx.fillRect(skipX, skipY, skipW, skipH);
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(skipX, skipY, skipW, skipH);
+    ctx.fillStyle = '#aaa';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText('스킵 (무료)', WIDTH / 2, skipY + skipH / 2 + 5);
+
+    if (game.invalidUpgradeMessageTimer > 0 && game.invalidUpgradeMessage) {
+        ctx.fillStyle = 'rgba(180, 60, 60, 0.95)';
+        ctx.fillRect(WIDTH / 2 - 150, skipY - 50, 300, 40);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText(game.invalidUpgradeMessage, WIDTH / 2, skipY - 25);
+    }
+    ctx.textAlign = 'left';
+}
+
+function getStageTileAsset(level) {
+    if (level <= 1) return ASSETS.stageTile1;
+    if (level <= 4) return ASSETS.stageTile3;
+    if (level <= 6) return ASSETS.stageTile5;
+    if (level <= 7) return ASSETS.stageTile7;
+    return ASSETS.stageTile8;
+}
+
+function drawStageSelectUI() {
+    if (game.invalidStageMessageTimer > 0) game.invalidStageMessageTimer -= 0.016;
+
+    const nodes = getStageMapNodes();
+    const nodeW = Math.min(48, WIDTH * 0.058);
+    const nodeH = Math.min(36, HEIGHT * 0.045);
+    const clearedSet = new Set(game.clearedStages || []);
+    const selectableSet = getSelectableStageIds();
+    const highlightAvailable = game.invalidStageMessageTimer > 0;
+
+    ctx.fillStyle = '#080810';
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    const gridGrad = ctx.createRadialGradient(WIDTH/2, HEIGHT/2, 0, WIDTH/2, HEIGHT/2, WIDTH * 0.8);
+    gridGrad.addColorStop(0, '#14182a');
+    gridGrad.addColorStop(0.6, '#0c0e18');
+    gridGrad.addColorStop(1, '#06080c');
+    ctx.fillStyle = gridGrad;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    const headerH = isMobile ? 52 : 64;
+    const mapPad = 16;
+    const mapFooterH = 40;
+    const mapTop = headerH + mapPad;
+    const mapH = HEIGHT - headerH - mapPad * 2 - mapFooterH;
+    const gridCols = 8, gridRows = 12;
+    const cellW = (WIDTH - mapPad * 2) / gridCols;
+    const cellH = mapH / gridRows;
+    ctx.strokeStyle = 'rgba(50, 80, 120, 0.25)';
+    ctx.lineWidth = 1;
+    for (let c = 0; c <= gridCols; c++) {
+        const gx = mapPad + c * cellW;
+        ctx.beginPath();
+        ctx.moveTo(gx, mapTop);
+        ctx.lineTo(gx, mapTop + mapH);
+        ctx.stroke();
+    }
+    for (let r = 0; r <= gridRows; r++) {
+        const gy = mapTop + r * cellH;
+        ctx.beginPath();
+        ctx.moveTo(mapPad, gy);
+        ctx.lineTo(WIDTH - mapPad, gy);
+        ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(20, 35, 55, 0.85)';
+    ctx.fillRect(0, 0, WIDTH, headerH);
+    ctx.strokeStyle = 'rgba(90, 140, 180, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, WIDTH - 2, headerH - 1);
+    ctx.fillStyle = '#b0d0e8';
+    ctx.font = `bold ${isMobile ? 18 : 26}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.fillText('다음 스테이지를 선택하세요', WIDTH / 2, isMobile ? 28 : 38);
+    ctx.fillStyle = '#6a9aba';
+    ctx.font = `${isMobile ? 10 : 12}px Arial`;
+    ctx.fillText('클리어한 스테이지에 연결된 스테이지만 선택할 수 있습니다', WIDTH / 2, isMobile ? 44 : 56);
+
+    const footerH = mapFooterH;
+    ctx.strokeStyle = 'rgba(70, 110, 150, 0.35)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(mapPad, headerH + mapPad, WIDTH - mapPad * 2, HEIGHT - headerH - mapPad * 2 - footerH);
+    ctx.strokeStyle = 'rgba(90, 140, 180, 0.2)';
+    ctx.strokeRect(mapPad + 3, headerH + mapPad + 3, WIDTH - mapPad * 2 - 6, HEIGHT - headerH - mapPad * 2 - footerH - 6);
+
+    ctx.strokeStyle = 'rgba(70, 100, 140, 0.35)';
+    ctx.lineWidth = 1.2;
+    nodes.forEach(n => {
+        if (!n.adjacent) return;
+        const posA = getStageNodeScreenPos(n);
+        n.adjacent.forEach(adjId => {
+            const b = nodes.find(m => m.id === adjId);
+            if (!b) return;
+            const posB = getStageNodeScreenPos(b);
+            ctx.beginPath();
+            ctx.moveTo(posA.x * WIDTH, posA.y * HEIGHT);
+            ctx.lineTo(posB.x * WIDTH, posB.y * HEIGHT);
+            ctx.stroke();
+        });
+    });
+
+    const iconAssets = { home: 'pixelHouse', grunt: 'grunt', robot: 'pixelSpider', rock: 'grunt', tower: 'pixelArmored', tank: 'pixelTank', console: 'pixelArmored', heli: 'pixelHeli', warning: 'pixelWarning', boss: 'pixelWarning' };
+
+    nodes.forEach(n => {
+        const pos = getStageNodeScreenPos(n);
+        const sx = pos.x * WIDTH - nodeW / 2;
+        const sy = pos.y * HEIGHT - nodeH / 2;
+        const cleared = clearedSet.has(n.id);
+        const selectable = selectableSet.has(n.id);
+        const showAsUnknown = selectable && !cleared;
+
+        ctx.shadowColor = 'rgba(0,0,0,0.6)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetX = 3;
+        ctx.shadowOffsetY = 3;
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fillRect(sx + 3, sy + 3, nodeW, nodeH);
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+
+        const tileImg = getStageTileAsset(n.level);
+        if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
+            ctx.drawImage(tileImg, sx, sy, nodeW, nodeH);
+        } else {
+            ctx.fillStyle = cleared ? '#1a2a2a' : (selectable ? '#1e2a3a' : '#0f141c');
+            ctx.fillRect(sx, sy, nodeW, nodeH);
+        }
+
+        if (selectable && highlightAvailable) {
+            ctx.strokeStyle = '#e8c050';
+            ctx.lineWidth = 2.5;
+        } else if (selectable) {
+            ctx.strokeStyle = '#6ab0e0';
+            ctx.lineWidth = 2;
+        } else if (cleared) {
+            ctx.strokeStyle = '#2a7a4a';
+            ctx.lineWidth = 1.5;
+        } else {
+            ctx.strokeStyle = '#2a2a38';
+            ctx.lineWidth = 1;
+        }
+        ctx.strokeRect(sx, sy, nodeW, nodeH);
+
+        ctx.textAlign = 'center';
+        if (showAsUnknown) {
+            ctx.fillStyle = '#a0c8e0';
+            ctx.font = `bold ${isMobile ? 16 : 20}px Arial`;
+            ctx.fillText('?', pos.x * WIDTH, sy + nodeH / 2 + 5);
+        } else {
+            ctx.fillStyle = cleared ? '#8aca9a' : '#6a8a9a';
+            ctx.font = `bold ${isMobile ? 10 : 11}px Arial`;
+            ctx.fillText('Lv.' + n.level, pos.x * WIDTH, sy + nodeH / 2 - 7);
+            const iconKey = iconAssets[n.icon];
+            const iconImg = iconKey && ASSETS[iconKey];
+            if (iconImg && iconImg.complete && iconImg.naturalWidth > 0) {
+                const iw = nodeW * 0.5, ih = nodeH * 0.45;
+                ctx.drawImage(iconImg, pos.x * WIDTH - iw/2, sy + nodeH / 2 + 1, iw, ih);
+            } else {
+                ctx.font = '10px Arial';
+                const icons = { home: '⌂', grunt: '▣', robot: '⬡', rock: '◆', tower: '▤', tank: '▥', console: '▦', heli: '✈', warning: '!', boss: '☠' };
+                ctx.fillText(icons[n.icon] || '?', pos.x * WIDTH, sy + nodeH / 2 + 10);
+            }
+        }
+    });
+
+    ctx.fillStyle = 'rgba(25, 45, 70, 0.7)';
+    ctx.fillRect(8, HEIGHT - 32, WIDTH - 16, 26);
+    ctx.strokeStyle = 'rgba(80, 120, 160, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(8, HEIGHT - 32, WIDTH - 16, 26);
+    ctx.fillStyle = '#7a9aba';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Lv = 클리어한 스테이지  |  ? = 미탐험 (선택 가능)', WIDTH / 2, HEIGHT - 15);
+
+    if (game.invalidStageMessageTimer > 0 && game.invalidStageMessage) {
+        ctx.fillStyle = 'rgba(180, 60, 60, 0.95)';
+        ctx.fillRect(WIDTH / 2 - 170, HEIGHT - 58, 340, 44);
+        ctx.strokeStyle = '#d05050';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(WIDTH / 2 - 170, HEIGHT - 58, 340, 44);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText(game.invalidStageMessage, WIDTH / 2, HEIGHT - 32);
+    }
+
     ctx.textAlign = 'left';
 }
 
@@ -2165,7 +2756,7 @@ function drawMinimap() {
     game.loots.forEach(l => {
         const dx = (l.x - leader.x) * scale, dy = (l.y - leader.y) * scale;
         if (Math.abs(dx) < size/2 && Math.abs(dy) < size/2) {
-            ctx.fillStyle = l.type === 'hp' ? '#ff0' : (l.type === 'gun' ? '#0ff' : (l.type === 'invincibility' ? '#ff0' : '#ff0')); // HP를 노란색으로 변경
+            ctx.fillStyle = l.type === 'hp' || l.type === 'extra_life' ? '#ff0' : (l.type === 'gun' ? '#0ff' : (l.type === 'invincibility' ? '#ff0' : '#ff0'));
             ctx.fillRect(centerX + dx - 2, centerY + dy - 2, 4, 4);
         }
     });
@@ -2197,44 +2788,110 @@ function generateEnvironment() {
 function spawnEnemies(dt) {
     if (game.state !== 'COMBAT' || game.paused) return;
     
-    const isBossWave = game.wave % 5 === 0;
-    const baseCount = game.wave <= 3 ? 8 + game.wave * 3 :
-                      game.wave <= 7 ? 17 + (game.wave - 3) * 5 :
-                      game.wave <= 10 ? 37 + (game.wave - 7) * 8 :
-                      61 + (game.wave - 10) * 12;
-    const limit = isBossWave ? 1 : Math.min(baseCount, 150);
+    const variant = game.currentStageVariant || 'normal';
+    const L = game.stageLevel || 1;
+    let isBossWave = game.wave % 5 === 0;
+    const baseCount = Math.min(12 + L * 4 + Math.floor(L * L * 0.4), 160);
+    let limit = isBossWave ? 1 : baseCount;
 
-    if (game.enemiesSpawned >= limit && game.entities.filter(e => e instanceof Enemy).length === 0) {
+    if (variant === 'treasure') {
+        limit = 0;
+        if (!game.treasureChestSpawned) {
+            const leader = game.squad[0];
+            if (leader) {
+                const cx = leader.x + leader.w / 2 - 150;
+                const cy = leader.y - 260;
+                game.entities.push(new TreasureChest(cx, cy));
+                game.treasureChestSpawned = true;
+            }
+        }
+        if (game.treasureCollected) {
+            if (game.currentStageId != null && !(game.clearedStages || []).includes(game.currentStageId)) {
+                game.clearedStages = game.clearedStages || [];
+                game.clearedStages.push(game.currentStageId);
+            }
+            game.treasureCollected = false;
+            game.treasureChestSpawned = false;
+            showUpgradeSelection();
+            return;
+        }
+    } else if (variant === 'objective') {
+        limit = Math.min(2, 2 + Math.floor(L / 4));
+        if (!game.objectiveSpawned) {
+            const leader = game.squad[0];
+            game.objectiveSpawned = true;
+            game.objectiveX = leader ? leader.x + leader.w / 2 - 30 : WIDTH / 2 - 30;
+            game.objectiveY = leader ? leader.y - 80 : HEIGHT / 2 - 80;
+            game.objectiveW = 60;
+            game.objectiveH = 50;
+        }
+        const leader = game.squad[0];
+        if (leader && !leader.dead && game.objectiveSpawned) {
+            const ox = game.objectiveX + game.objectiveW / 2;
+            const oy = game.objectiveY + game.objectiveH / 2;
+            const lx = leader.x + leader.w / 2;
+            const ly = leader.y + leader.h / 2;
+            const dist = Math.sqrt((lx - ox) ** 2 + (ly - oy) ** 2);
+            if (dist < 70) {
+                game.objectiveInteractTimer = (game.objectiveInteractTimer || 0) + dt;
+                if (game.objectiveInteractTimer >= 2 || (Input.keys['KeyE'])) {
+                    if (game.currentStageId != null && !(game.clearedStages || []).includes(game.currentStageId)) {
+                        game.clearedStages = game.clearedStages || [];
+                        game.clearedStages.push(game.currentStageId);
+                    }
+                    game.objectiveActive = false;
+                    game.objectiveSpawned = false;
+                    game.objectiveInteractTimer = 0;
+                    game.damageNumbers.push(new DamageNumber(leader.x + leader.w/2, leader.y, 'OBJECTIVE!', true));
+                    showUpgradeSelection();
+                    return;
+                }
+            } else {
+                game.objectiveInteractTimer = 0;
+            }
+        }
+        game.objectiveActive = true;
+    } else if (variant === 'double_boss') {
+        limit = 2;
+        isBossWave = true;
+    } else if (variant === 'elite') {
+        baseCount = Math.min(Math.floor(baseCount * 1.4), 150);
+        limit = isBossWave ? 1 : baseCount;
+    }
+
+    if (variant !== 'treasure' && game.enemiesSpawned >= limit &&
+        game.entities.filter(e => e instanceof Enemy && !e.dead).length === 0 &&
+        game.loots.length === 0 && !game.objectiveActive) {
+        if (game.currentStageId != null && !(game.clearedStages || []).includes(game.currentStageId)) {
+            game.clearedStages = game.clearedStages || [];
+            game.clearedStages.push(game.currentStageId);
+        }
         showUpgradeSelection();
-        nextWave();
         return;
     }
     if (game.enemiesSpawned >= limit) return;
 
     game.spawnTimer -= dt;
-    const spawnRate = game.wave <= 3 ? Math.max(0.4, 5.0 / limit) :
-                      game.wave <= 7 ? Math.max(0.2, 4.0 / limit) :
-                      game.wave <= 10 ? Math.max(0.1, 3.0 / limit) :
-                      Math.max(0.06, 2.0 / limit);
+    const spawnRate = limit <= 0 ? 999 : Math.max(0.12, 3.5 / Math.sqrt(limit));
     
     if (game.spawnTimer <= 0) {
         game.spawnTimer = isBossWave ? 0 : spawnRate;
 
         let type = 'grunt';
-        if (isBossWave) type = 'boss';
+        if (isBossWave || variant === 'double_boss') type = 'boss';
         else {
             const r = Math.random();
-            if (game.wave >= 2 && r > 0.75) type = 'wasp';
-            if (game.wave >= 2 && r > 0.75) type = 'worm';
-            if (game.wave >= 3 && r > 0.70) type = 'sniper'; // 총알 몬스터 더 많이 (0.85 -> 0.70)
-            if (game.wave >= 5 && r > 0.88) type = 'bomber';
-            if (game.wave >= 3 && r > 0.81) type = 'electric';
-            if (game.wave >= 7 && r > 0.93) type = 'beast';
-            if (game.wave >= 4 && r > 0.86) type = 'titan';
-            if (game.wave >= 10) {
+            if (L >= 2 && r > 0.75) type = 'wasp';
+            if (L >= 2 && r > 0.75) type = 'worm';
+            if (L >= 3 && r > 0.70) type = 'sniper';
+            if (L >= 5 && r > 0.88) type = 'bomber';
+            if (L >= 3 && r > 0.81) type = 'electric';
+            if (L >= 7 && r > 0.93) type = 'beast';
+            if (L >= 4 && r > 0.86) type = 'titan';
+            if (L >= 8) {
                 if (r > 0.4) type = 'wasp';
                 if (r > 0.55) type = 'worm';
-                if (r > 0.60) type = 'sniper'; // 총알 몬스터 더 많이 (0.75 -> 0.60)
+                if (r > 0.60) type = 'sniper';
                 if (r > 0.75) type = 'bomber';
                 if (r > 0.80) type = 'electric';
                 if (r > 0.88) type = 'beast';
@@ -2294,6 +2951,10 @@ function checkLootCollision() {
                     s.invulnerable = 0.1;
                 });
                 game.damageNumbers.push(new DamageNumber(leader.x + leader.w/2, leader.y, 'INVINCIBLE 5s!', true));
+            } else if (l.type === 'extra_life') {
+                game.extraLives = (game.extraLives || 0) + 1;
+                game.damageNumbers.push(new DamageNumber(leader.x + leader.w/2, leader.y, '+1 LIFE!', true));
+                if (l.fromTreasureChest) game.treasureCollected = true;
             } else if (l.type === 'squad') {
                 const skills = ['NOVA', 'SHOCKWAVE', 'CHAINLIGHTNING', 'HEAL'];
                 const usedSkills = game.squad.map(s => s.skillType).filter(s => s);
@@ -2340,7 +3001,35 @@ function nextWave() {
     waveEl.innerText = game.wave;
     game.enemiesSpawned = 0;
     game.killsThisWave = 0;
+    game.treasureChestSpawned = false;
+    game.treasureCollected = false;
+    game.objectiveActive = false;
+    game.objectiveSpawned = false;
+    game.objectiveInteractTimer = 0;
     game.waveDrops = ['hp', 'gun', 'squad', 'invincibility'];
+    game.loots = [];
+    game.particles = [];
+    game.projectiles = [];
+    game.skillEffects = [];
+    game.damageNumbers = [];
+    game.muzzleFlashes = [];
+    game.footprints = [];
+    game.warnings = [];
+    const leader = game.squad[0];
+    if (leader && !leader.dead) {
+        leader.x = WIDTH / 2 - leader.w / 2;
+        leader.y = HEIGHT / 2 - leader.h / 2;
+        leader.vx = 0;
+        leader.vy = 0;
+        game.squad.forEach((p, i) => {
+            if (p.dead) return;
+            if (i === 0) return;
+            p.x = leader.x - (i * 50);
+            p.y = leader.y;
+            p.vx = 0;
+            p.vy = 0;
+        });
+    }
     if (game.wave > persistent.highWave) {
         persistent.highWave = game.wave;
         savePersistent();
@@ -2352,16 +3041,26 @@ function checkCollisions() {
         if (!p.isPlayer || p.remove) return;
         game.entities.forEach(e => {
             if (typeof e.type === 'undefined' || e.dead || p.hitList.includes(e)) return;
-            if (!isOnScreen(e)) return;
-            // 더 정확한 충돌 감지 (원형 충돌)
-            const ex = e.x + e.w / 2;
-            const ey = e.y + e.h / 2;
-            const px = p.x;
-            const py = p.y;
-            const dist = Math.sqrt((px - ex)**2 + (py - ey)**2);
-            const hitRadius = Math.min(e.w, e.h) / 2 + p.size;
-            
-            if (dist < hitRadius) {
+            const ew = e.w || 40, eh = e.h || 40;
+            if (!(e.x + ew > game.camera.x - 120 && e.x < game.camera.x + WIDTH + 120 &&
+                  e.y + eh > game.camera.y - 120 && e.y < game.camera.y + HEIGHT + 120)) return;
+            const ex = e.x + ew / 2;
+            const ey = e.y + eh / 2;
+            const hitRadius = Math.max(Math.min(ew, eh) / 2, 28) + p.size;
+            let hit = false;
+            const dist = Math.sqrt((p.x - ex)**2 + (p.y - ey)**2);
+            if (dist < hitRadius) hit = true;
+            if (!hit && p.lastX != null && (p.lastX !== p.x || p.lastY !== p.y)) {
+                const steps = 5;
+                for (let i = 1; i <= steps; i++) {
+                    const t = i / steps;
+                    const qx = p.lastX + (p.x - p.lastX) * t;
+                    const qy = p.lastY + (p.y - p.lastY) * t;
+                    const d = Math.sqrt((qx - ex)**2 + (qy - ey)**2);
+                    if (d < hitRadius) { hit = true; break; }
+                }
+            }
+            if (hit) {
                 e.takeDamage(p.damage, p.isCrit);
                 p.hitList.push(e);
                 p.onHit();
@@ -2473,6 +3172,22 @@ function drawCrosshair() {
 }
 
 function drawHUD() {
+    if (game.lastCoinRevive) {
+        const r = game.lastCoinRevive;
+        const boxY = isMobile ? 58 : 60;
+        const boxH = 24;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(WIDTH / 2 - 100, boxY, 200, boxH);
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(WIDTH / 2 - 100, boxY, 200, boxH);
+        ctx.fillStyle = '#ffd700';
+        ctx.font = `bold ${isMobile ? 12 : 14}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.fillText(`💰 ${r.before} → ${r.after} (-${r.spent})`, WIDTH / 2, boxY + boxH - 6);
+        ctx.textAlign = 'left';
+    }
+
     if (game.combo > 1) {
         const comboScale = 1 + Math.min(game.combo * 0.02, 0.5);
         ctx.save();
@@ -2493,6 +3208,10 @@ function drawHUD() {
         ctx.fillStyle = '#ffd700';
         ctx.font = 'bold 18px Arial';
         ctx.fillText(`💰 ${game.coins}`, 20, HEIGHT - 80);
+        if (game.extraLives > 0) {
+            ctx.fillStyle = '#ff0';
+            ctx.fillText(`❤ ${game.extraLives}`, 100, HEIGHT - 80);
+        }
 
         ctx.fillStyle = '#0ff';
         ctx.font = '14px monospace';
@@ -2573,6 +3292,28 @@ function init() {
     resize();
     Input.init();
     updateStartScreen();
+
+    function handleStageSelectClick(clientX, clientY) {
+        if (!game.showStageSelect || !stageSelectOverlay) return;
+        const rect = stageSelectOverlay.getBoundingClientRect();
+        const scaleX = (rect.width > 0 && WIDTH) ? WIDTH / rect.width : 1;
+        const scaleY = (rect.height > 0 && HEIGHT) ? HEIGHT / rect.height : 1;
+        const cx = (clientX - rect.left) * scaleX;
+        const cy = (clientY - rect.top) * scaleY;
+        const hit = getStageNodeAt(cx, cy);
+        if (hit) { selectStage(hit.node); }
+    }
+    if (stageSelectOverlay) {
+        stageSelectOverlay.addEventListener('click', e => handleStageSelectClick(e.clientX, e.clientY));
+        stageSelectOverlay.addEventListener('touchend', e => {
+            e.preventDefault();
+            if (e.changedTouches && e.changedTouches[0]) {
+                const t = e.changedTouches[0];
+                handleStageSelectClick(t.clientX, t.clientY);
+            }
+        }, { passive: false });
+        stageSelectOverlay.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+    }
     startScreen.querySelector('#start-btn').addEventListener('click', startGame);
     gameOverScreen.querySelector('#restart-btn').addEventListener('click', startGame);
     
@@ -2601,10 +3342,16 @@ function startGame() {
         skillEffects: [], particles: [], loots: [],
         damageNumbers: [], muzzleFlashes: [], footprints: [],
         environmentObjects: [], waveDrops: ['hp', 'gun', 'squad', 'invincibility'],
-        upgradeChoices: [], showUpgradeUI: false,
+        upgradeChoices: [], showUpgradeUI: false, invalidUpgradeMessage: '', invalidUpgradeMessageTimer: 0,
+        showStageSelect: false, stageLevel: 1,
+        clearedStages: [], currentStageId: 0, currentStageVariant: 'normal',
+        treasureChestSpawned: false, treasureCollected: false,
+        objectiveActive: false, objectiveSpawned: false, objectiveInteractTimer: 0,
+        objectiveX: 0, objectiveY: 0, objectiveW: 60, objectiveH: 50,
+        invalidStageMessage: '', invalidStageMessageTimer: 0,
         combo: 0, comboTimer: 0, maxCombo: 0,
         lootMagnet: 100, warnings: [], killsThisWave: 0,
-        showMinimap: true, difficulty: 1.0, explosionFlash: 0
+        showMinimap: true, difficulty: 1.0, explosionFlash: 0, extraLives: 0, lastCoinRevive: null
     };
 
     scoreEl.innerText = '0';
@@ -2649,7 +3396,7 @@ function loop(ts) {
     const dt = Math.min((ts - game.lastTime) / 1000, 0.1);
     game.lastTime = ts;
     
-    if (!game.paused && !game.showUpgradeUI) {
+    if (!game.paused && !game.showUpgradeUI && !game.showStageSelect) {
         game.time += dt;
 
         if (game.combo > 0) {
@@ -2663,6 +3410,7 @@ function loop(ts) {
 
         spawnEnemies(dt);
 
+        game.projectiles.forEach(p => { if (p.owner && p.owner.dead) p.remove = true; });
         game.projectiles.forEach(p => p.update(dt));
         game.projectiles = game.projectiles.filter(p => !p.remove);
 
@@ -2690,70 +3438,53 @@ function loop(ts) {
 
         checkCollisions();
 
-        const leader = game.squad.find(p => p.isLeader) || game.squad[0];
-        if (leader) {
-            game.camera.x += (leader.x - WIDTH / 2 - game.camera.x) * 5 * dt;
-            game.camera.y += (leader.y - HEIGHT / 2 - game.camera.y) * 5 * dt;
-        }
+        // 카메라 고정: 캐릭터가 화면 어디로든 이동할 수 있도록 (배경 고정 모드)
+        game.camera.x = 0;
+        game.camera.y = 0;
 
         if (game.shake > 0) game.shake *= 0.9;
         if (game.shake < 0.5) game.shake = 0;
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    
-    // 배경 그라데이션 (어두운 우주 느낌)
-    const bg = ctx.createRadialGradient(WIDTH/2, HEIGHT/2, 0, WIDTH/2, HEIGHT/2, Math.max(WIDTH, HEIGHT));
-    bg.addColorStop(0, '#0a0a1a');
-    bg.addColorStop(0.5, '#050510');
-    bg.addColorStop(1, '#000005');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    
-    // 별 배경 생성
-    ctx.save();
-    ctx.translate(-game.camera.x * 0.3, -game.camera.y * 0.3);
-    ctx.fillStyle = '#ffffff';
-    for (let i = 0; i < 100; i++) {
-        const starX = (i * 137.5) % (WIDTH * 3);
-        const starY = (i * 197.3) % (HEIGHT * 3);
-        const brightness = (i % 3) * 0.3 + 0.4;
-        ctx.globalAlpha = brightness;
-        ctx.fillRect(starX, starY, 1, 1);
+
+    // 고정 배경: 캐릭터가 움직여도 배경은 화면에 고정
+    if (ASSETS.spaceBg.complete && ASSETS.spaceBg.naturalWidth > 0) {
+        ctx.drawImage(ASSETS.spaceBg, 0, 0, ASSETS.spaceBg.naturalWidth, ASSETS.spaceBg.naturalHeight, 0, 0, WIDTH, HEIGHT);
+    } else {
+        const bg = ctx.createRadialGradient(WIDTH/2, HEIGHT/2, 0, WIDTH/2, HEIGHT/2, Math.max(WIDTH, HEIGHT));
+        bg.addColorStop(0, '#0a0a1a');
+        bg.addColorStop(0.5, '#050510');
+        bg.addColorStop(1, '#000005');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
     }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-    
-    // 행성/소행성 배경 요소
-    ctx.save();
-    ctx.translate(-game.camera.x * 0.1, -game.camera.y * 0.1);
-    ctx.fillStyle = 'rgba(50, 50, 80, 0.3)';
-    for (let i = 0; i < 5; i++) {
-        const planetX = (i * 500 + game.time * 10) % (WIDTH * 5);
-        const planetY = (i * 300) % (HEIGHT * 5);
-        ctx.beginPath();
-        ctx.arc(planetX, planetY, 30 + i * 10, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    ctx.restore();
 
     const sx = (Math.random() - 0.5) * game.shake;
     const sy = (Math.random() - 0.5) * game.shake;
-
-    // 그리드 (더 어둡게)
-    ctx.strokeStyle = 'rgba(20, 20, 40, 0.3)';
-    ctx.lineWidth = 1;
-    const ox = -game.camera.x % 100, oy = -game.camera.y % 100;
-    ctx.beginPath();
-    for (let x = ox; x < WIDTH; x += 100) { ctx.moveTo(x, 0); ctx.lineTo(x, HEIGHT); }
-    for (let y = oy; y < HEIGHT; y += 100) { ctx.moveTo(0, y); ctx.lineTo(WIDTH, y); }
-    ctx.stroke();
 
     ctx.translate(-game.camera.x + sx, -game.camera.y + sy);
 
     game.environmentObjects.forEach(e => e.draw(ctx));
     game.footprints.forEach(f => f.draw(ctx));
     game.loots.forEach(l => l.draw(ctx));
+
+    if (game.objectiveActive && game.objectiveSpawned) {
+        const ox = game.objectiveX, oy = game.objectiveY, ow = game.objectiveW, oh = game.objectiveH;
+        ctx.fillStyle = 'rgba(40, 80, 120, 0.9)';
+        ctx.fillRect(ox, oy, ow, oh);
+        ctx.strokeStyle = '#5ab';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(ox, oy, ow, oh);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('목표', ox + ow/2, oy + oh/2 - 6);
+        const t = game.objectiveInteractTimer || 0;
+        ctx.font = '10px Arial';
+        ctx.fillText(t >= 2 ? '완료!' : (t > 0 ? Math.ceil(2 - t) + '초' : '[E] 또는 2초 대기'), ox + ow/2, oy + oh/2 + 8);
+        ctx.textAlign = 'left';
+    }
     
     game.entities.sort((a, b) => (a.y + a.h) - (b.y + b.h));
     game.entities.forEach(e => e.draw(ctx));
@@ -2781,7 +3512,23 @@ function loop(ts) {
     
     if (game.showMinimap) drawMinimap();
     if (game.showUpgradeUI) drawUpgradeUI();
-    if (game.paused && !game.showUpgradeUI) drawPauseScreen();
+    if (game.showStageSelect) {
+        document.body.classList.add('stage-select');
+        if (stageSelectOverlay) {
+            stageSelectOverlay.classList.remove('hidden');
+            stageSelectOverlay.classList.add('active');
+            const overNode = isOverSelectableStageNode(Input.mouse.x, Input.mouse.y);
+            stageSelectOverlay.style.cursor = overNode ? 'pointer' : 'default';
+        }
+        drawStageSelectUI();
+    } else {
+        document.body.classList.remove('stage-select');
+        if (stageSelectOverlay) {
+            stageSelectOverlay.classList.add('hidden');
+            stageSelectOverlay.classList.remove('active');
+        }
+    }
+    if (game.paused && !game.showUpgradeUI && !game.showStageSelect) drawPauseScreen();
 
     requestAnimationFrame(loop);
 }

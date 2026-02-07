@@ -2146,19 +2146,16 @@ class TreasureChest {
         this.type = 'treasureChest';
         this.dead = false;
         this.breakTime = 5;
-        this.damageAccumulator = 0;
-        this.lastHitTime = 0;
+        this.firstHitTime = -1;  // 첫 공격 시각
     }
     takeDamage(amount) {
         if (this.dead) return;
-        this.lastHitTime = game.time;
+        if (this.firstHitTime < 0) this.firstHitTime = game.time;
     }
     update(dt) {
         if (this.dead) return;
-        if (game.time - this.lastHitTime < 0.2) {
-            this.damageAccumulator += dt;
-            if (this.damageAccumulator >= this.breakTime) {
-                this.dead = true;
+        if (this.firstHitTime >= 0 && game.time - this.firstHitTime >= this.breakTime) {
+            this.dead = true;
                 const treasureCoins = BASE_COIN * TREASURE_COIN_MULT;
                 if (game.extraLives > 0) {
                     game.coins += treasureCoins;
@@ -2177,17 +2174,15 @@ class TreasureChest {
                     game.particles.push(new Particle(this.x + this.w / 2, this.y + this.h / 2, '#ffd700'));
                 }
             }
-        } else {
-            this.damageAccumulator = 0;
-        }
     }
     draw(ctx) {
         if (this.dead) return;
-        if (this.damageAccumulator > 0) {
+        if (this.firstHitTime >= 0) {
+            const progress = Math.min(1, (game.time - this.firstHitTime) / this.breakTime);
             ctx.fillStyle = 'rgba(0,0,0,0.5)';
             ctx.fillRect(this.x, this.y + this.h + 8, this.w, 10);
             ctx.fillStyle = '#ffd700';
-            ctx.fillRect(this.x, this.y + this.h + 8, this.w * (this.damageAccumulator / this.breakTime), 10);
+            ctx.fillRect(this.x, this.y + this.h + 8, this.w * progress, 10);
         }
         const img = ASSETS.chest;
         if (img && img.complete && img.naturalWidth > 0) {

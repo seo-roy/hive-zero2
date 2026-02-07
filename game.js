@@ -2146,15 +2146,15 @@ class TreasureChest {
         this.type = 'treasureChest';
         this.dead = false;
         this.breakTime = 5;
-        this.firstHitTime = -1;  // 첫 공격 시각
+        this.spawnTime = game.time;  // 생성 시각 - 5초 후 자동 파괴
     }
     takeDamage(amount) {
         if (this.dead) return;
-        if (this.firstHitTime < 0) this.firstHitTime = game.time;
+        // 공격받아도 무시 (5초 타이머로만 파괴)
     }
     update(dt) {
         if (this.dead) return;
-        if (this.firstHitTime >= 0 && game.time - this.firstHitTime >= this.breakTime) {
+        if (game.time - this.spawnTime >= this.breakTime) {
             this.dead = true;
                 const treasureCoins = BASE_COIN * TREASURE_COIN_MULT;
                 if (game.extraLives > 0) {
@@ -2177,13 +2177,11 @@ class TreasureChest {
     }
     draw(ctx) {
         if (this.dead) return;
-        if (this.firstHitTime >= 0) {
-            const progress = Math.min(1, (game.time - this.firstHitTime) / this.breakTime);
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            ctx.fillRect(this.x, this.y + this.h + 8, this.w, 10);
-            ctx.fillStyle = '#ffd700';
-            ctx.fillRect(this.x, this.y + this.h + 8, this.w * progress, 10);
-        }
+        const progress = Math.min(1, (game.time - this.spawnTime) / this.breakTime);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(this.x, this.y + this.h + 8, this.w, 10);
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(this.x, this.y + this.h + 8, this.w * progress, 10);
         const img = ASSETS.chest;
         if (img && img.complete && img.naturalWidth > 0) {
             ctx.drawImage(img, this.x, this.y, this.w, this.h);
